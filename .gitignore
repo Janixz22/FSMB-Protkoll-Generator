@@ -1,0 +1,13 @@
+# Echte Stammdaten (Namen, personenbezogene Daten) – nicht fürs öffentliche
+# Repo. FSMB-Konfiguration.example.json (anonymisiert) bleibt getrackt und
+# dient als Vorlage; die echte Datei lässt sich im Konfigurations-Tab der App
+# importieren/exportieren, ohne dass sie hier versioniert wird.
+FSMB-Konfiguration.json
+
+# Design-Quelldatei des Logos (groß, nicht von der App benötigt; logo.svg
+# reicht für die PDF-Erzeugung)
+*.eps
+
+# Editor-/OS-Artefakte
+.DS_Store
+Thumbs.db

@@ -1,0 +1,66 @@
+{
+  "stimmberechtigte": [
+    "Vorname Nachname 1",
+    "Vorname Nachname 2",
+    "Vorname Nachname 3",
+    "Vorname Nachname 4",
+    "Vorname Nachname 5"
+  ],
+  "ratsmitglieder": [
+    "Vorname Nachname 1",
+    "Vorname Nachname 2",
+    "Vorname Nachname 3"
+  ],
+  "berichte_fsv": [
+    "Bericht des:der Geschäftsführer:in ()",
+    "Bericht des:der stellvertretenden Geschäftsführer:in ()",
+    "Bericht des:der Referent:in für Awareness ()",
+    "Bericht des:der Referent:in für Systemadministration ()",
+    "Bericht des:der Referent:in für Öffentlichkeitsarbeit ()",
+    "Bericht des:der Koordinator:in für Finanzen ()",
+    "Bericht des:der stellvertretenden Koordinator:in für Finanzen ()",
+    "Bericht des:der Referent:in für das Inventar ()",
+    "Bericht des:der Referent:in für Merch, Overalls und Patches ()",
+    "Bericht des:der Koordinator:in für Lehre ()",
+    "Bericht des:der stellvertretenden Koordinator:in für Lehre ()",
+    "Bericht des:der Referent:in für Maschinenbau ()",
+    "Bericht des:der Referent:in für Wirtschaftsingenieurwesen ()",
+    "Bericht des:der Referent:in für CES ()",
+    "Bericht des:der Koordinator:in für Veranstaltungen ()",
+    "Bericht des:der Referent:in für Sportveranstaltungen ()",
+    "Bericht des:der Referent:in für die Erstsemesterarbeit ()",
+    "Bericht des:der Referent:in für die Erstsemesterfeier ()",
+    "Bericht des:der Referent:in für Auslandsangelegenheiten ()",
+    "Bericht aus der Gremienarbeit ()",
+    "Bericht aus der Senatsarbeit ()",
+    "Bericht des Patch-Ausschusses ()"
+  ],
+  "berichte_fas": [
+    "Bericht des:der Geschäftsführer:in ()",
+    "Bericht des:der stellvertretenden Geschäftsführer:in ()",
+    "Bericht des:der Referent:in für Awareness ()",
+    "Bericht des:der Referent:in für Systemadministration ()",
+    "Bericht des:der Referent:in für Öffentlichkeitsarbeit ()",
+    "Bericht des:der Koordinator:in für Finanzen ()",
+    "Bericht des:der stellvertretenden Koordinator:in für Finanzen ()",
+    "Bericht des:der Referent:in für das Inventar ()",
+    "Bericht des:der Referent:in für Merch, Overalls und Patches ()",
+    "Bericht des:der Koordinator:in für Lehre ()",
+    "Bericht der Fachschaftsaktiven"
+  ],
+  "raeume": [
+    "Beispielraum R100",
+    "Konferenzraum R122",
+    "Büro R101"
+  ],
+  "ausschuesse": [
+    {
+      "name": "Prüfungsausschuss (Beispiel)",
+      "mitglieder": [
+        "Vorname Nachname 1",
+        "Vorname Nachname 2",
+        "Vorname Nachname 3"
+      ]
+    }
+  ]
+}

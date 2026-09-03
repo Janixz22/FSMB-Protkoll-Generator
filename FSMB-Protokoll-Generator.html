@@ -1,0 +1,3219 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FSV Protokoll-Generator</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+  <style>
+
+/* ── Farben & Grundlayout ─────────────────────────────────────────────────── */
+:root {
+  --navy:   #002B5C;   /* FSMB Dunkelblau  */
+  --blue:   #00468C;   /* Mittelblau        */
+  --rwth:   #00549F;   /* RWTH Blau         */
+  --bg:     #f4f4f2;
+  --card:   #ffffff;
+  --text:   #1a1a1a;
+  --muted:  #6b6b6b;
+  --border: #e0deda;
+  --bluel:  #e8f0f8;   /* Hellblau (Hover, Auswahl) */
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 15px;
+}
+
+/* ── Kopfzeile (App-Header) ────────────────────────────────────────────────── */
+header {
+  background: var(--navy);
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2rem;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
+.logo-name { font-size: 15px; font-weight: 600; color: #fff; }
+.logo-sub  { font-size: 11px; color: rgba(255,255,255,.5); }
+
+/* ── Tabs ──────────────────────────────────────────────────────────────────── */
+.tabs { display: flex; }
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: rgba(255,255,255,.55);
+  padding: 0 18px;
+  height: 54px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .15s;
+}
+.tab:hover        { color: rgba(255,255,255,.85); }
+.tab.active       { color: #fff; border-bottom-color: #fff; }
+
+/* ── Seitenstruktur ────────────────────────────────────────────────────────── */
+.page           { display: none; }
+.page.active    { display: block; }
+.container      { max-width: 820px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+/* ── Karten ────────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.card-title {
+  font-family: Arial, sans-serif;
+  font-size: 18px;
+  color: var(--navy);
+  margin-bottom: 1.25rem;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--navy);
+}
+
+/* ── Formularfelder ────────────────────────────────────────────────────────── */
+.meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.field input, .field select {
+  width: 100%;
+  padding: 8px 11px;
+  font-size: 14px;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fafaf8;
+  color: var(--text);
+  box-sizing: border-box;
+  height: 38px;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: border-color .15s;
+}
+.field select {
+  background-color: #fafaf8;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6b6b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  padding-right: 30px;
+  cursor: pointer;
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--rwth);
+  box-shadow: 0 0 0 3px rgba(0,84,159,.1);
+}
+
+/* ── Tagesordnungs-Gruppen ─────────────────────────────────────────────────── */
+.top-group {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #fafaf8;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid transparent;
+}
+.group-header:hover              { background: #f0f0ec; }
+.group-open .group-header        { border-bottom-color: var(--border); }
+.group-title                     { font-size: 13px; font-weight: 600; }
+.group-meta                      { display: flex; align-items: center; gap: 8px; }
+.badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 20px;
+  background: var(--bluel);
+  color: var(--rwth);
+  font-weight: 600;
+}
+.chev {
+  font-size: 11px;
+  color: var(--muted);
+  display: inline-block;
+  transition: transform .2s;
+}
+.group-open .chev   { transform: rotate(180deg); }
+.group-body         { display: none; padding: 6px; flex-direction: column; gap: 2px; }
+.group-open .group-body { display: flex; }
+
+/* ── Einzelne TOP-Einträge ─────────────────────────────────────────────────── */
+.top-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.top-item:hover  { background: var(--bg); }
+.top-item.on     { background: var(--bluel); }
+.top-item input[type=checkbox] {
+  accent-color: var(--rwth);
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+/* Benutzerdefinierte Einträge (Anträge/Wahlen/Diskussionen) */
+.user-inp {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  color: inherit;
+  outline: none;
+  min-width: 0;
+}
+.del-btn {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #aaa;
+  font-size: 17px;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.del-btn:hover { color: var(--navy); }
+
+/* ── Drag-and-Drop für TO-Punkte ─────────────────────────────────────────── */
+.drag-handle {
+  cursor: grab;
+  color: #ccc;
+  font-size: 13px;
+  padding: 0;
+  margin-right: 4px;
+  flex-shrink: 0;
+  line-height: 1;
+  user-select: none;
+  letter-spacing: -2px;
+}
+.drag-handle:hover { color: var(--muted); }
+.drag-handle:active { cursor: grabbing; }
+.top-item.dragging { opacity: 0.35; background: var(--bg) !important; }
+.top-item.drag-over { box-shadow: 0 -2px 0 0 var(--rwth); }
+
+/* ── Schaltflächen ─────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 20px;
+  border-radius: 5px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  transition: all .15s;
+}
+.btn:disabled           { opacity: .5; cursor: not-allowed; }
+.btn-primary            { background: var(--navy); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #001d3d; }
+.btn-dl                 { background: var(--rwth); color: #fff; }
+.btn-dl:hover:not(:disabled)      { background: #003f7a; }
+.btn-sec                { background: #fff; color: var(--text); border: 1px solid var(--border); }
+.btn-sec:hover          { border-color: var(--rwth); color: var(--rwth); }
+.btn-row                { display: flex; gap: 10px; flex-wrap: wrap; }
+.btn-tiny {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  color: var(--muted);
+  font-family: inherit;
+  line-height: 1.4;
+}
+.btn-tiny:hover { border-color: var(--rwth); color: var(--rwth); }
+
+/* ── Upload-Bereich ────────────────────────────────────────────────────────── */
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  padding: 2.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all .15s;
+}
+.upload-zone:hover, .upload-zone.drag {
+  border-color: var(--rwth);
+  background: var(--bluel);
+}
+.upload-zone p { font-size: 14px; color: var(--muted); margin-top: 8px; }
+
+/* ── Hinweisboxen & Status ─────────────────────────────────────────────────── */
+.notice {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 10px 14px;
+  background: var(--bluel);
+  border-radius: 5px;
+  border-left: 3px solid var(--rwth);
+  margin-top: 14px;
+  line-height: 1.6;
+}
+.file-status { font-size: 13px; font-weight: 600; margin-top: 10px; color: #1a5c1a; display: none; }
+.err-box {
+  display: none;
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: #eff5ff;
+  border-radius: 6px;
+  border-left: 3px solid var(--navy);
+  font-size: 13px;
+  color: var(--navy);
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* ── Fortschrittsanzeige ───────────────────────────────────────────────────── */
+.progress-wrap              { display: none; margin-top: 14px; }
+.progress-wrap.active       { display: block; }
+.progress-label             { font-size: 13px; color: var(--muted); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--rwth);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.progress-bar               { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.progress-fill              { height: 100%; background: var(--rwth); border-radius: 2px; transition: width .4s ease; width: 0%; }
+
+/* ── Vorschau-Bereich ──────────────────────────────────────────────────────── */
+#preview-content { font-size: 14px; line-height: 1.7; max-height: 400px; overflow-y: auto; }
+#preview-content h2 { font-family: Arial, sans-serif; color: var(--navy); margin: 1.2rem 0 .5rem; font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+#preview-content h3 { color: var(--blue); font-size: 14px; margin: 1rem 0 .3rem; font-weight: 600; }
+#preview-content h4 { font-size: 13px; margin: .8rem 0 .3rem; font-weight: 600; }
+#preview-content table { width: 100%; border-collapse: collapse; margin: .8rem 0; font-size: 13px; }
+#preview-content th { background: var(--navy); color: #fff; padding: 7px 10px; text-align: left; font-size: 12px; }
+#preview-content td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+#preview-content code { background: var(--bluel); color: var(--navy); padding: 7px 12px; display: block; font-family: Arial, monospace; font-size: 12px; border-left: 3px solid var(--rwth); margin: .4rem 0; font-weight: 600; }
+#preview-content blockquote { border-left: 3px solid var(--border); padding-left: 10px; color: var(--muted); font-style: italic; }
+#preview-content ul, #preview-content ol { padding-left: 1.4rem; margin: .3rem 0; }
+#preview-raw { background: #fafaf8; border: 1px solid var(--border); border-radius: 6px; padding: 1rem; font-family: Arial, monospace; font-size: 12px; color: #555; white-space: pre-wrap; max-height: 360px; overflow-y: auto; line-height: 1.6; display: none; }
+
+/* ── Modus-Selektor ────────────────────────────────────────────────────────── */
+.mode-bar {
+  display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 1.5rem;
+}
+.mode-btn {
+  flex: 1; padding: 14px 10px; border-radius: 8px;
+  border: 2px solid var(--border); background: var(--card);
+  cursor: pointer; font-family: inherit; text-align: center;
+  transition: all .15s;
+}
+.mode-btn:hover { border-color: var(--rwth); }
+.mode-btn.active {
+  border-color: var(--rwth); background: var(--rwth);
+  color: white; box-shadow: 0 2px 8px rgba(0,0,0,.18);
+}
+.mode-btn .mb-name { font-size: 18px; font-weight: 700; display: block; }
+.mode-btn .mb-sub  { font-size: 11px; opacity: .8; display: block; margin-top: 2px; }
+.mode-btn.active .mb-sub { opacity: .85; }
+
+/* ── Anwesenheits-Chips ────────────────────────────────────────────────────── */
+.att-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--bluel); color: var(--navy);
+  border-radius: 20px; padding: 3px 10px; font-size: 12px;
+  font-weight: 500; margin: 2px;
+}
+.att-chip .chip-del {
+  cursor: pointer; color: var(--muted); font-size: 14px;
+  line-height: 1; background: none; border: none; font-family: inherit;
+}
+.att-chip .chip-del:hover { color: var(--navy); }
+
+/* ── Mitglieds-Badges (Verwaltung) ────────────────────────────────────────── */
+.member-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 20px; padding: 3px 10px; font-size: 12px;
+}
+.member-badge .mbadge-alias { color: var(--muted); font-size: 11px; }
+.member-badge .mbadge-del { cursor: pointer; color: var(--muted); background: none; border: none; font-size: 15px; line-height: 1; }
+.member-badge .mbadge-del:hover { color: var(--navy); }
+
+/* ── Konfiguration ─────────────────────────────────────────────────────────── */
+.cfg-label {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px;
+}
+/* ── Entry-Listen ──────────────────────────────────────────────────────────── */
+.cfg-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.cfg-entry { display: flex; align-items: center; gap: 6px; }
+.cfg-entry-input {
+  flex: 1; padding: 6px 10px; font-size: 13px; font-family: inherit;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: #fafaf8; color: var(--text); height: 32px;
+}
+.cfg-entry-input:focus {
+  outline: none; border-color: var(--rwth);
+  box-shadow: 0 0 0 2px rgba(0,84,159,.1);
+}
+.cfg-entry-input::placeholder { color: #bbb; }
+.btn-add-entry {
+  width: 100%; padding: 6px 10px; font-size: 12px; font-family: inherit;
+  border: 1px dashed var(--border); border-radius: 4px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  text-align: left; transition: all .15s;
+}
+.btn-add-entry:hover { border-color: var(--rwth); color: var(--rwth); background: var(--bluel); }
+
+/* ── Autocomplete-Dropdown ─────────────────────────────────────────────────── */
+.autocomplete-list {
+  display: none; position: absolute; top: 100%; left: 0; right: 0;
+  background: white; border: 1px solid var(--border);
+  border-top: none; border-radius: 0 0 5px 5px;
+  z-index: 200; max-height: 160px; overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,.1);
+}
+.autocomplete-list.open { display: block; }
+.ac-item {
+  padding: 7px 11px; font-size: 13px; cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.ac-item:hover, .ac-item.active { background: var(--bluel); }
+.ac-alias { font-size: 11px; color: var(--muted); }
+
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo-name">FSMB Protokoll-Generator</div>
+    <div class="logo-sub">Fachschaftsvertretung Maschinenbau &middot; RWTH Aachen</div>
+  </div>
+  <nav class="tabs">
+    <button class="tab active" onclick="showPage('generator', this)">Generator</button>
+    <button class="tab"        onclick="showPage('export',    this)">Export &amp; PDF</button>
+    <button class="tab tab-icon" onclick="showPage('config', this); renderConfigPage()" title="Konfiguration">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2.2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83
+                 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33
+                 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09
+                 A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06
+                 a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15
+                 a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09
+                 A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06
+                 a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68
+                 a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09
+                 a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06
+                 a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9
+                 a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09
+                 a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </nav>
+</header>
+
+<!-- ── Tab 1: Generator ──────────────────────────────────────────────────── -->
+<div class="page active" id="page-generator">
+  <div class="container">
+
+    <!-- ── Modus-Selektor ────────────────────────────────────────────────── -->
+    <div class="mode-bar" style="margin-top: 1.5rem;">
+      <button class="mode-btn active" data-mode="fsv" onclick="setMode('fsv', this)">
+        <span class="mb-name">FSV</span>
+        <span class="mb-sub">Fachschaftsvertretung</span>
+      </button>
+      <button class="mode-btn" data-mode="fas" onclick="setMode('fas', this)">
+        <span class="mb-name">FaS</span>
+        <span class="mb-sub">Fachschaftssitzung</span>
+      </button>
+      <button class="mode-btn" data-mode="ag" onclick="setMode('ag', this)">
+        <span class="mb-name">AG</span>
+        <span class="mb-sub">AG-Sitzung</span>
+      </button>
+      <button class="mode-btn" data-mode="gremien" onclick="setMode('gremien', this)">
+        <span class="mb-name">Gremien</span>
+        <span class="mb-sub">Vorbesprechung</span>
+      </button>
+      <button class="mode-btn" data-mode="ausschuss" onclick="setMode('ausschuss', this)">
+        <span class="mb-name">Ausschüsse</span>
+        <span class="mb-sub">Ausschusssitzung</span>
+      </button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Sitzungsmetadaten</div>
+      <div class="meta-grid">
+        <div class="field"><label>Sitzungsnummer</label><input id="m-sitzung"     placeholder="z.B. 7"></div>
+        <div class="field" id="field-agname" style="display:none"><label>AG-Name</label><input id="m-agname" placeholder="z.B. AG Marketing"></div>
+        <div class="field" id="field-gremien-gremium" style="display:none"><label>Gremium</label><input id="m-gremien-gremium" placeholder="z.B. Prüfungsausschuss"></div>
+        <div class="field" id="field-ausschuss" style="display:none"><label>Ausschuss</label><select id="m-ausschuss"></select></div>
+        <div class="field"><label>Datum</label>          <input id="m-date"        placeholder="z.B. 22.05.2026"></div>
+        <div class="field"><label>Ort</label><select id="m-ort-select" onchange="toggleOrtCustom()"></select><input id="m-ort-custom" placeholder="Raum eingeben…" style="display:none;margin-top:6px;"></div>
+        <div class="field" id="field-wahlperiode"><label>Wahlperiode</label><select id="m-wahlperiode"></select></div>
+        <div class="field"><label>Sitzungsleitung</label><input id="m-leitung"     placeholder="Name(n) + Funktion"></div>
+        <div class="field"><label>Protokollf&uuml;hrung</label><input id="m-proto" placeholder="Name(n)"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Tagesordnungspunkte</div>
+      <div id="tops-container"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Vorlage herunterladen</div>
+      <div class="btn-row">
+        <button class="btn btn-dl" id="btn-dl-md">&#8595; Markdown-Vorlage herunterladen</button>
+        <button class="btn btn-sec" id="btn-copy-md" title="Markdown in Zwischenablage kopieren">&#128203; Kopieren</button>
+      </div>
+      <div class="notice">
+        In HedgeDoc &ouml;ffnen, Protokoll ausf&uuml;llen, als Markdown exportieren
+        und dann im Tab <strong>Export &amp; PDF</strong> hochladen.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Tagesordnung vorab verschicken</div>
+      <div class="btn-row">
+        <button class="btn btn-sec" id="btn-dl-agenda">&#8595; Tagesordnung als PDF</button>
+      </div>
+      <div class="notice">
+        Erzeugt ein kompaktes PDF mit Sitzungsmetadaten und der aktuell
+        gew&auml;hlten Tagesordnung &ndash; zum Rundschicken vor der Sitzung.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Tab 2: Export & PDF ───────────────────────────────────────────────── -->
+<div class="page" id="page-export">
+  <div class="container" style="padding-top: 1.5rem;">
+
+    <div class="card">
+      <div class="card-title">Protokoll hochladen</div>
+      <div class="upload-zone" id="upload-zone">
+        <div style="font-size: 32px;">&#128196;</div>
+        <p><strong style="color: var(--rwth);">Klicken</strong> oder Datei hierher ziehen</p>
+        <p style="font-size: 13px; margin-top: 4px;">.md Datei aus HedgeDoc-Export</p>
+        <input type="file" id="file-input" accept=".md,.txt" style="display: none">
+      </div>
+      <div class="file-status" id="file-status"></div>
+    </div>
+
+    <div class="card" id="preview-card" style="display: none;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+        <div class="card-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">Vorschau</div>
+        <div class="btn-row">
+          <button class="btn btn-sec"     id="btn-md-view"       onclick="showMdView()">Markdown</button>
+          <button class="btn btn-primary" id="btn-rendered-view" onclick="showRenderedView()">Gerendert</button>
+        </div>
+      </div>
+      <div id="preview-raw"></div>
+      <div id="preview-content"></div>
+    </div>
+
+    <div class="card" id="pdf-card" style="display: none;">
+      <div class="card-title">PDF erzeugen</div>
+      <div class="btn-row">
+        <button class="btn btn-dl" id="btn-pdf">&#8595; PDF herunterladen</button>
+      </div>
+      <div class="progress-wrap" id="pw">
+        <div class="progress-label"><span class="spinner"></span><span id="pl">Wird vorbereitet...</span></div>
+        <div class="progress-bar"><div class="progress-fill" id="pf"></div></div>
+      </div>
+      <div class="err-box" id="err-box"></div>
+      <div class="notice" style="margin-top: 14px;">
+        Das PDF wird direkt im Browser erzeugt und heruntergeladen &ndash; ohne
+        Druckdialog. Beim ersten Erzeugen werden einmalig die ben&ouml;tigten
+        Schriftdaten nachgeladen; im Protokoll eingebettete Bilder werden bei
+        jeder Erzeugung neu geladen (Internetverbindung erforderlich). Emojis
+        werden im PDF nicht dargestellt und automatisch entfernt.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- u2500u2500 Tab 3: Konfiguration u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500 -->
+<!-- ── Tab 3: Konfiguration ──────────────────────────────────────────────── -->
+<div class="page" id="page-config">
+  <div class="container" style="padding-top: 1.5rem;">
+
+    <!-- Ersteinrichtungs-Hinweis (nur wenn noch keine Konfiguration importiert wurde) -->
+    <div class="notice" id="cfg-first-time-banner" style="display:none; margin-top:0; margin-bottom:1.25rem; border-left-color:#c99a00; background:#fff8e6;">
+      <strong>Noch keine Konfiguration geladen.</strong> Es werden aktuell nur
+      Platzhalter-Beispieldaten angezeigt. Weiter unten unter &bdquo;Sichern &amp;
+      Laden&ldquo; die mitgelieferte <code style="background:none;display:inline;padding:0;font-weight:600;">FSMB-Konfiguration.json</code>
+      importieren, um die echten Stammdaten zu laden.
+    </div>
+
+    <!-- Mitgliederlisten -->
+    <div class="card">
+      <div class="card-title">Mitgliederlisten</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div>
+          <div class="cfg-label">Stimmberechtigte (FSV-Mitglieder)</div>
+          <div id="cfg-list-stimm" class="cfg-list"></div>
+          <button class="btn-add-entry" onclick="addCfgEntry('cfg-list-stimm', 'Name eingeben\u2026')">+ Eintrag hinzuf&uuml;gen</button>
+        </div>
+        <div>
+          <div class="cfg-label">Ratsmitglieder</div>
+          <div id="cfg-list-rat" class="cfg-list"></div>
+          <button class="btn-add-entry" onclick="addCfgEntry('cfg-list-rat', 'Name eingeben\u2026')">+ Eintrag hinzuf&uuml;gen</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Berichte -->
+    <div class="card">
+      <div class="card-title">Berichte</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:1rem;">
+        Vollst&auml;ndiger Berichtstitel pro Eintrag, z.&thinsp;B.
+        <em>Bericht des Gesch&auml;ftsf&uuml;hrers</em>.
+        Die Reihenfolge entspricht der Reihenfolge in der Vorlage.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div>
+          <div class="cfg-label">Berichte FSV</div>
+          <div id="cfg-list-berichte-fsv" class="cfg-list"></div>
+          <button class="btn-add-entry" onclick="addCfgEntry('cfg-list-berichte-fsv', 'Bericht des \u2026')">+ Eintrag hinzuf&uuml;gen</button>
+        </div>
+        <div>
+          <div class="cfg-label">Berichte FaS</div>
+          <div id="cfg-list-berichte-fas" class="cfg-list"></div>
+          <button class="btn-add-entry" onclick="addCfgEntry('cfg-list-berichte-fas', 'Bericht des \u2026')">+ Eintrag hinzuf&uuml;gen</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- R&auml;ume -->
+    <div class="card">
+      <div class="card-title">R&auml;ume</div>
+      <div class="cfg-label">Verf&uuml;gbare R&auml;ume (Vorschl&auml;ge im Ort-Feld des Generators)</div>
+      <div id="cfg-list-raeume" class="cfg-list"></div>
+      <button class="btn-add-entry" onclick="addCfgEntry('cfg-list-raeume', 'Raum eingeben…')">+ Eintrag hinzuf&uuml;gen</button>
+    </div>
+
+    <!-- Aussch&uuml;sse -->
+    <div class="card">
+      <div class="card-title">Aussch&uuml;sse</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:1rem;">
+        Name des Ausschusses und seine gew&auml;hlten, stimmberechtigten Mitglieder.
+        Erscheint im Generator als Dropdown im Modus &bdquo;Aussch&uuml;sse&ldquo;.
+      </p>
+      <div id="cfg-ausschuesse"></div>
+      <button class="btn-add-entry" onclick="addAusschuss()">+ Ausschuss hinzuf&uuml;gen</button>
+    </div>
+
+    <!-- Sichern & Laden -->
+    <div class="card">
+      <div class="card-title">Sichern &amp; Laden</div>
+      <div class="btn-row" style="margin-bottom:12px;">
+        <button class="btn btn-primary" id="cfg-save">Konfiguration speichern</button>
+        <button class="btn btn-sec"     id="cfg-export">&#8595; JSON exportieren</button>
+      </div>
+      <div class="upload-zone" id="cfg-upload-zone" style="padding:1.25rem;">
+        <div style="font-size:26px;">&#128196;</div>
+        <p><strong style="color: var(--rwth);">Klicken</strong> oder JSON-Datei hierher ziehen, um sie zu importieren</p>
+        <input type="file" id="cfg-import-file" accept=".json" style="display: none">
+      </div>
+      <div id="cfg-status" style="font-size:13px;font-weight:600;color:#1a5c1a;margin-top:10px;margin-bottom:10px;display:none;"></div>
+      <div id="cfg-sync-status" style="font-size:12px;color:var(--muted);margin-top:10px;"></div>
+      <div class="notice">
+        Die Konfiguration wird im Browser gespeichert (localStorage) und bleibt
+        beim n&auml;chsten &Ouml;ffnen erhalten. F&uuml;r Backups oder andere Ger&auml;te
+        bitte als JSON exportieren und dort importieren.
+      </div>
+    </div>
+
+    <!-- Logo -->
+    <div class="card">
+      <div class="card-title">Logo</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:1rem;">
+        F&uuml;r die PDF-Erzeugung wird das FSMB-Logo aus <code style="background:none;display:inline;padding:0;font-weight:600;">logo.svg</code>
+        geladen. Beim lokalen &Ouml;ffnen ohne Server (insbesondere in Chrome) kann
+        das automatische Nachladen aus Sicherheitsgr&uuml;nden fehlschlagen &ndash;
+        in dem Fall die Datei einmalig hier hochladen; sie wird danach im Browser
+        gespeichert und muss nicht erneut geladen werden.
+      </p>
+      <div class="upload-zone" id="logo-upload-zone" style="padding:1.25rem;">
+        <div style="font-size:26px;">&#128196;</div>
+        <p><strong style="color: var(--rwth);">Klicken</strong> oder logo.svg hierher ziehen</p>
+        <input type="file" id="logo-import-file" accept=".svg,image/svg+xml" style="display: none">
+      </div>
+      <div id="logo-status" style="font-size:12px;color:var(--muted);margin-top:10px;"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FSV PROTOKOLL-GENERATOR
+// Fachschaftsvertretung Maschinenbau · RWTH Aachen
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// FSMB-Logo: liegt als externe Datei "logo.svg" im selben Ordner (siehe
+// README). Automatisches Nachladen per fetch() funktioniert zuverlässig,
+// wenn die Seite über einen Webserver bereitgestellt wird (z.B. GitHub
+// Pages) oder in Firefox – schlägt aber in Chrome fehl, wenn die Datei per
+// Doppelklick über file:// geöffnet wurde (Browser blockiert das Nachladen
+// lokaler Nachbardateien per JavaScript aus Sicherheitsgründen). Für diesen
+// Fall kann die Datei einmalig über den Konfigurations-Tab importiert werden
+// (Klick/Drag & Drop) – das funktioniert immer, weil der Nutzer die Datei
+// dabei explizit auswählt, und wird dauerhaft in localStorage zwischen-
+// gespeichert, sodass der manuelle Import nur einmal nötig ist.
+var LOGO_CACHE_KEY = 'fsmb_logo_svg_v1';
+var logoSvgTextPromise = null;
+
+function loadLogoSvg() {
+  if (logoSvgTextPromise) return logoSvgTextPromise;
+  var cached = null;
+  try { cached = localStorage.getItem(LOGO_CACHE_KEY); } catch(e) {}
+  if (cached) {
+    logoSvgTextPromise = Promise.resolve(cached);
+    return logoSvgTextPromise;
+  }
+  logoSvgTextPromise = fetch('logo.svg').then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.text();
+  }).then(function(text) {
+    try { localStorage.setItem(LOGO_CACHE_KEY, text); } catch(e) {}
+    return text;
+  }).catch(function() { return null; });
+  return logoSvgTextPromise;
+}
+
+/** Übernimmt eine manuell hochgeladene/gedropte logo.svg dauerhaft in localStorage. */
+function importLogoFile(file) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var svgText = e.target.result;
+    try { localStorage.setItem(LOGO_CACHE_KEY, svgText); } catch(err) {}
+    logoSvgTextPromise = Promise.resolve(svgText);
+    renderLogoStatus();
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+/** Zeigt im Konfigurations-Tab an, ob das Logo bereits lokal verfügbar ist. */
+function renderLogoStatus() {
+  var el = document.getElementById('logo-status');
+  if (!el) return;
+  var cached = null;
+  try { cached = localStorage.getItem(LOGO_CACHE_KEY); } catch(e) {}
+  if (cached) {
+    el.textContent = '✓ Logo lokal gespeichert und einsatzbereit';
+    el.style.color = '#1a5c1a';
+  } else {
+    el.textContent = 'Kein Logo lokal gespeichert – wird bei der PDF-Erzeugung automatisch versucht nachzuladen.';
+    el.style.color = 'var(--muted)';
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// KONFIGURATION (localStorage)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+var CONFIG_KEY = 'fsmb_config_v1';
+
+/** Standard-Berichte, falls noch keine Konfiguration gespeichert ist. */
+var CONFIG_DEFAULT = {
+  stimmberechtigte: [],
+  ratsmitglieder:   [],
+  berichte_fsv: [
+    'Bericht des Geschäftsführers',
+    'Bericht des stellvertretenden Geschäftsführers',
+    'Bericht des Referenten für Systemadministration',
+    'Bericht des Koordinators für Finanzen',
+    'Bericht der stellvertretenden Koordinatorin für Finanzen',
+    'Bericht des Referenten für das Inventar',
+    'Bericht des Referenten für Merch, Overalls und Patches',
+    'Bericht des Koordinators für Lehre',
+    'Bericht des Referenten für Maschinenbau',
+    'Bericht des Referenten für Wirtschaftsingenieurwesen',
+    'Bericht des Referenten für CES',
+    'Bericht des Referenten für Auslandsangelegenheiten',
+    'Bericht des Koordinators für Veranstaltungen',
+    'Bericht des Referenten für Sportveranstaltungen',
+    'Bericht des Referenten für die Erstsemesterarbeit',
+    'Bericht des Referenten für die Erstsemesterfeier',
+    'Bericht aus der Gremienarbeit',
+    'Bericht aus der Senatsarbeit'
+  ],
+  berichte_fas: [
+    'Bericht des Geschäftsführers',
+    'Bericht des stellvertretenden Geschäftsführers',
+    'Bericht des Koordinators für Finanzen',
+    'Bericht des Koordinators für Lehre',
+    'Bericht des Koordinators für Veranstaltungen'
+  ],
+  raeume: [
+    'B.A.R.D.O.W. R104',
+    'Orangerie R103'
+  ],
+  ausschuesse: [
+    { name: 'Prüfungsausschuss (Beispiel)', mitglieder: ['Vorname Nachname 1', 'Vorname Nachname 2', 'Vorname Nachname 3'] },
+    { name: 'Patch-Ausschuss (Beispiel)',   mitglieder: ['Vorname Nachname 1', 'Vorname Nachname 2'] }
+  ]
+};
+
+/** Liest die gespeicherte Konfiguration aus dem localStorage. */
+function getConfig() {
+  try {
+    var saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || 'null');
+    // Mit CONFIG_DEFAULT mergen, damit neu hinzugekommene Felder (z.B. raeume,
+    // ausschuesse) auch bei älteren, bereits gespeicherten Konfigurationen greifen.
+    return saved ? Object.assign({}, CONFIG_DEFAULT, saved) : CONFIG_DEFAULT;
+  } catch(e) { return CONFIG_DEFAULT; }
+}
+
+/** Speichert eine Konfiguration dauerhaft. */
+function saveConfig(cfg) {
+  try { localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg)); } catch(e) {}
+}
+
+// Drag-&-Drop-Zustand für Konfig-Listen
+var cfgDragState = { containerId: null, fromIdx: null };
+
+/**
+ * Rendert eine Eintrags-Liste: jeder Eintrag bekommt ein eigenes Input-Feld
+ * mit einem Löschen-Button. Unterstützt Drag & Drop und Enter-Taste.
+ */
+function renderCfgList(containerId, items, placeholder) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '';
+  items.forEach(function(item, idx) {
+    var row = document.createElement('div');
+    row.className = 'cfg-entry';
+
+    // Drag-Handle
+    row.draggable = true;
+    var handle = document.createElement('span');
+    handle.className = 'drag-handle';
+    handle.textContent = '\u22ee\u22ee';
+    handle.title = 'Ziehen zum Umsortieren';
+    row.appendChild(handle);
+
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = item;
+    inp.className = 'cfg-entry-input';
+    inp.placeholder = placeholder || 'Eingabe\u2026';
+
+    // Enter → neuen Eintrag darunter anfügen und fokussieren
+    inp.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addCfgEntry(containerId, placeholder);
+      }
+    });
+    row.appendChild(inp);
+
+    var del = document.createElement('button');
+    del.className = 'del-btn';
+    del.innerHTML = '&times;';
+    del.title = 'Entfernen';
+    del.onclick = function() {
+      var cur = Array.from(container.querySelectorAll('.cfg-entry-input'))
+                     .map(function(i) { return i.value; });
+      cur.splice(idx, 1);
+      renderCfgList(containerId, cur, placeholder);
+      var remaining = container.querySelectorAll('.cfg-entry-input');
+      if (remaining.length) remaining[Math.min(idx, remaining.length - 1)].focus();
+    };
+    row.appendChild(del);
+
+    // Drag-Events
+    (function(cid, i, ph) {
+      row.addEventListener('dragstart', function(e) {
+        cfgDragState = { containerId: cid, fromIdx: i };
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', '');
+        setTimeout(function() { row.classList.add('dragging'); }, 0);
+      });
+      row.addEventListener('dragend', function() {
+        row.classList.remove('dragging');
+        container.querySelectorAll('.cfg-entry.drag-over').forEach(function(el) {
+          el.classList.remove('drag-over');
+        });
+      });
+      row.addEventListener('dragover', function(e) {
+        if (cfgDragState.containerId !== cid) return;
+        e.preventDefault();
+      });
+      row.addEventListener('dragenter', function(e) {
+        if (cfgDragState.containerId !== cid || cfgDragState.fromIdx === i) return;
+        e.preventDefault();
+        container.querySelectorAll('.cfg-entry.drag-over').forEach(function(el) {
+          el.classList.remove('drag-over');
+        });
+        row.classList.add('drag-over');
+      });
+      row.addEventListener('drop', function(e) {
+        e.preventDefault();
+        row.classList.remove('drag-over');
+        if (cfgDragState.containerId !== cid || cfgDragState.fromIdx === i) return;
+        var from = cfgDragState.fromIdx;
+        var to   = i;
+        var cur  = Array.from(container.querySelectorAll('.cfg-entry-input'))
+                        .map(function(inp) { return inp.value; });
+        var moved = cur.splice(from, 1)[0];
+        if (from < to) to--;
+        cur.splice(to, 0, moved);
+        cfgDragState = { containerId: null, fromIdx: null };
+        renderCfgList(cid, cur, ph);
+      });
+    })(containerId, idx, placeholder);
+
+    container.appendChild(row);
+  });
+}
+
+/** Fügt einer Liste ein neues leeres Eingabefeld hinzu und fokussiert es. */
+function addCfgEntry(containerId, placeholder) {
+  var container = document.getElementById(containerId);
+  var cur = Array.from(container.querySelectorAll('.cfg-entry-input'))
+                 .map(function(i) { return i.value; });
+  cur.push('');
+  renderCfgList(containerId, cur, placeholder);
+  var inputs = container.querySelectorAll('.cfg-entry-input');
+  if (inputs.length) inputs[inputs.length - 1].focus();
+}
+
+/** Liest die Werte aller Eingabefelder einer Liste aus. */
+function readCfgList(containerId) {
+  return Array.from(document.getElementById(containerId).querySelectorAll('.cfg-entry-input'))
+              .map(function(inp) { return inp.value.trim(); }).filter(Boolean);
+}
+
+/**
+ * Rendert die Ausschuss-Liste: pro Ausschuss ein Namensfeld + eine
+ * verschachtelte Mitgliederliste (wiederverwendet renderCfgList/addCfgEntry).
+ */
+function renderAusschuesseCfg(ausschuesse) {
+  var container = document.getElementById('cfg-ausschuesse');
+  if (!container) return;
+  container.innerHTML = '';
+  ausschuesse.forEach(function(a, idx) {
+    var block = document.createElement('div');
+    block.style.marginBottom = '16px';
+    block.style.paddingBottom = '12px';
+    block.style.borderBottom = '1px solid var(--border)';
+
+    var nameRow = document.createElement('div');
+    nameRow.className = 'cfg-entry';
+    nameRow.style.marginBottom = '8px';
+
+    var nameInp = document.createElement('input');
+    nameInp.type = 'text';
+    nameInp.className = 'cfg-entry-input cfg-ausschuss-name-input';
+    nameInp.placeholder = 'Name des Ausschusses…';
+    nameInp.value = a.name || '';
+    nameRow.appendChild(nameInp);
+
+    var delAusBtn = document.createElement('button');
+    delAusBtn.className = 'del-btn';
+    delAusBtn.innerHTML = '&times;';
+    delAusBtn.title = 'Ausschuss entfernen';
+    (function(i) { delAusBtn.onclick = function() { removeAusschuss(i); }; })(idx);
+    nameRow.appendChild(delAusBtn);
+    block.appendChild(nameRow);
+
+    var membersLabel = document.createElement('div');
+    membersLabel.className = 'cfg-label';
+    membersLabel.textContent = 'Gewählte Mitglieder';
+    block.appendChild(membersLabel);
+
+    var membersContainer = document.createElement('div');
+    membersContainer.id = 'cfg-aus-mitglieder-' + idx;
+    membersContainer.className = 'cfg-list';
+    block.appendChild(membersContainer);
+
+    var addMemberBtn = document.createElement('button');
+    addMemberBtn.className = 'btn-add-entry';
+    addMemberBtn.textContent = '+ Mitglied hinzufügen';
+    (function(i) { addMemberBtn.onclick = function() { addCfgEntry('cfg-aus-mitglieder-' + i, 'Name eingeben…'); }; })(idx);
+    block.appendChild(addMemberBtn);
+
+    container.appendChild(block);
+    renderCfgList('cfg-aus-mitglieder-' + idx, a.mitglieder || [], 'Name eingeben…');
+  });
+}
+
+/** Fügt einen neuen, leeren Ausschuss hinzu. */
+function addAusschuss() {
+  var current = readAusschuesseCfg();
+  current.push({ name: '', mitglieder: [] });
+  renderAusschuesseCfg(current);
+}
+
+/** Entfernt einen Ausschuss anhand seines Index. */
+function removeAusschuss(idx) {
+  var current = readAusschuesseCfg();
+  current.splice(idx, 1);
+  renderAusschuesseCfg(current);
+}
+
+/** Liest die aktuell im DOM stehenden Ausschüsse (Name + Mitgliederliste) aus. */
+function readAusschuesseCfg() {
+  var container = document.getElementById('cfg-ausschuesse');
+  if (!container) return [];
+  var nameInputs = container.querySelectorAll('.cfg-ausschuss-name-input');
+  var out = [];
+  nameInputs.forEach(function(inp, idx) {
+    out.push({ name: inp.value.trim(), mitglieder: readCfgList('cfg-aus-mitglieder-' + idx) });
+  });
+  return out.filter(function(a) { return a.name; });
+}
+
+/** Befüllt die Konfigurationsseite mit den aktuellen gespeicherten Werten. */
+function renderConfigPage() {
+  var cfg = getConfig();
+  renderCfgList('cfg-list-stimm',         cfg.stimmberechtigte || [], 'Name eingeben\u2026');
+  renderCfgList('cfg-list-rat',           cfg.ratsmitglieder   || [], 'Name eingeben\u2026');
+  renderCfgList('cfg-list-berichte-fsv',  cfg.berichte_fsv     || [], 'Bericht des \u2026');
+  renderCfgList('cfg-list-berichte-fas',  cfg.berichte_fas     || [], 'Bericht des \u2026');
+  renderCfgList('cfg-list-raeume',        cfg.raeume           || [], 'Raum eingeben\u2026');
+  renderAusschuesseCfg(cfg.ausschuesse || []);
+  renderConfigSyncStatus();
+  renderLogoStatus();
+  loadLogoSvg().then(renderLogoStatus);
+}
+
+/** Liest alle Eintragsfelder aus und speichert die Konfiguration. */
+function applyAndSaveConfig() {
+  var cfg = {
+    stimmberechtigte: readCfgList('cfg-list-stimm'),
+    ratsmitglieder:   readCfgList('cfg-list-rat'),
+    berichte_fsv:     readCfgList('cfg-list-berichte-fsv'),
+    berichte_fas:     readCfgList('cfg-list-berichte-fas'),
+    raeume:           readCfgList('cfg-list-raeume'),
+    ausschuesse:      readAusschuesseCfg()
+  };
+  saveConfig(cfg);
+  // TOPS neu laden, damit Berichte sofort aktualisiert werden
+  TOPS = getTopsForMode(currentMode);
+  sel = {}; openState = {};
+  TOPS.forEach(function(g) {
+    openState[g.id] = !!g.open;
+    g.items.forEach(function(it) { sel[it.id] = it.on; });
+  });
+  renderTops();
+  initRaeumeDropdown();
+  initAusschussDropdown();
+  return cfg;
+}
+
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODUS-KONFIGURATION
+// Farben und Verhalten je Sitzungstyp
+// ═══════════════════════════════════════════════════════════════════════════════
+
+var MODES = {
+  fsv: { name:'FSV', label:'Fachschaftsvertretung', gremium:'FSV \u2013 Fachschaftsvertretung (FSMB)',
+         navy:'#002B5C', blue:'#00468C', rwth:'#00549F', bluel:'#E8F0F8',
+         hasWahlperiode:true, hasMoney:true },
+  fas: { name:'FaS', label:'Fachschaftssitzung',    gremium:'FaS \u2013 Fachschaftssitzung (FSMB)',
+         navy:'#8B0513', blue:'#AA0620', rwth:'#CC071E', bluel:'#FCE8EA',
+         hasWahlperiode:true, hasMoney:true },
+  ag:  { name:'AG',  label:'AG-Sitzung',             gremium:'',
+         navy:'#3D3472', blue:'#5B549A', rwth:'#7A6FAC', bluel:'#EDEAF6',
+         hasWahlperiode:false, hasMoney:false },
+  gremien: { name:'Gremien', label:'Vorbesprechung', gremium:'',
+          navy:'#2F5E15', blue:'#41801D', rwth:'#57AB27', bluel:'#EAF4E1',
+          hasWahlperiode:false, hasMoney:false },
+  ausschuss: { name:'Ausschüsse', label:'Ausschusssitzung', gremium:'',
+          navy:'#1B4B73', blue:'#2E6DA4', rwth:'#3E82C4', bluel:'#C7DDF2',
+          hasWahlperiode:false, hasMoney:true }
+};
+var currentMode = 'fsv';
+var LAST_AGENDA_DATA = null; // wird von buildMd() befüllt, siehe btn-dl-agenda
+
+// ── TOPS-Definitionen je Modus ────────────────────────────────────────────────
+
+/** Gibt die TOPS-Konfiguration für den gewählten Sitzungstyp zurück. */
+function getTopsForMode(mode) {
+  // Berichte-Unterpunkte aus der Konfiguration laden
+  var cfg = getConfig();
+  var berichtList = (mode === 'fas' ? cfg.berichte_fas : cfg.berichte_fsv) || [];
+  if (!berichtList.length) berichtList = ['Bericht (Konfiguration leer)'];
+  var berichtItems = berichtList.map(function(title, i) {
+    return { id: 'b-' + i, label: title, on: true };
+  });
+
+  if (mode === 'ag') {
+    // AG: vereinfachte Struktur ohne Berichte, Finanzen, Wahlen
+    return [
+      { id:'std', title:'Standardpunkte', fixed:true, open:true, items:[
+        { id:'top1', label:'TOP 1 \u2013 Er\u00f6ffnung der Sitzung',            on:true },
+        { id:'top2', label:'TOP 2 \u2013 Mitteilung der Sitzungsleitung',         on:true }
+      ]},
+      { id:'g_themen', title:'Themen', open:true, expandable:true, items:[
+        { id:'t-1', label:'Thema (Platzhalter 1)', on:false },
+        { id:'t-2', label:'Thema (Platzhalter 2)', on:false }
+      ]},
+      { id:'g9', title:'Diskussionen', open:false, expandable:true, items:[
+        { id:'9-1', label:'9.1 \u2013 Diskussion (Platzhalter)', on:false }
+      ]},
+      { id:'end', title:'Abschlusspunkte', fixed:true, open:true, items:[
+        { id:'top_termine', label:'TOP X \u2013 Sitzungstermine', on:true },
+        { id:'top_versch',  label:'TOP X \u2013 Verschiedenes',   on:true }
+      ]}
+    ];
+  }
+
+  if (mode === 'gremien') {
+    return [
+      { id:'std', title:'Standardpunkte', fixed:true, open:true, items:[
+        { id:'top1', label:'TOP 1 \u2013 Er\u00f6ffnung der Sitzung', on:true },
+        { id:'top2', label:'TOP 2 \u2013 Mitteilung der Sitzungsleitung', on:true }
+      ]},
+      { id:'g_themen', title:'Themen', open:true, expandable:true, items:[
+        { id:'t-1', label:'Thema (Platzhalter 1)', on:false },
+        { id:'t-2', label:'Thema (Platzhalter 2)', on:false }
+      ]},
+      { id:'g9', title:'Diskussionen', open:false, expandable:true, items:[
+        { id:'9-1', label:'9.1 \u2013 Diskussion (Platzhalter)', on:false }
+      ]},
+      { id:'end', title:'Abschlusspunkte', fixed:true, open:true, items:[
+        { id:'top_termine', label:'TOP X \u2013 Sitzungstermine', on:true },
+        { id:'top_versch',  label:'TOP X \u2013 Verschiedenes',   on:true }
+      ]}
+    ];
+  }
+
+  if (mode === 'ausschuss') {
+    return [
+      { id:'std', title:'Standardpunkte', fixed:true, open:true, items:[
+        { id:'top1', label:'TOP 1 \u2013 Er\u00f6ffnung und Beschlussf\u00e4higkeit', on:true },
+        { id:'top2', label:'TOP 2 \u2013 Mitteilung des Vorsitzenden', on:true },
+        { id:'top3', label:'TOP 3 \u2013 Genehmigung der Tagesordnung', on:true }
+      ]},
+      { id:'g7', title:'TOP 4 \u2013 Antr\u00e4ge', open:false, expandable:true, items:[
+        { id:'7-1', label:'7.1 \u2013 Antrag (Platzhalter 1)', on:false },
+        { id:'7-2', label:'7.2 \u2013 Antrag (Platzhalter 2)', on:false }
+      ]},
+      { id:'g9', title:'TOP 5 \u2013 Diskussionen', open:false, expandable:true, items:[
+        { id:'9-1', label:'9.1 \u2013 Diskussion (Platzhalter)', on:false }
+      ]},
+      { id:'end', title:'Abschlusspunkte', fixed:true, open:true, items:[
+        { id:'top_termine', label:'TOP 6 \u2013 Sitzungstermine', on:true },
+        { id:'top_versch',  label:'TOP 7 \u2013 Verschiedenes',   on:true }
+      ]}
+    ];
+  }
+
+  // FSV und FaS: identische Struktur, nur TOP-2-Label und Berichte-Titel unterscheiden sich
+  var top2label = mode === 'fas'
+    ? 'TOP 2 \u2013 Mitteilung der Vorsitzenden'
+    : 'TOP 2 \u2013 Mitteilung des Pr\u00e4sidiums';
+  var berichteTitle = mode === 'fas'
+    ? 'TOP 5 \u2013 Berichte der Fachschaftsaktiven'
+    : 'TOP 5 \u2013 Berichte des Rates und Anfragen';
+
+  return [
+    { id:'std', title:'Standardpunkte', fixed:true, open:true, items:[
+      { id:'top1', label:'TOP 1 \u2013 Er\u00f6ffnung der Sitzung und Feststellen der Beschlussf\u00e4higkeit', on:true },
+      { id:'top2', label:top2label,                                     on:true },
+      { id:'top3', label:'TOP 3 \u2013 Genehmigung der Tagesordnung',    on:true },
+      { id:'top4', label:'TOP 4 \u2013 Genehmigung von Protokollen',     on:true }
+    ]},
+    { id:'g5', title:berichteTitle, open:false, items:berichtItems },
+    ...(mode === 'fsv' ? [{ id:'g6', title:'TOP 6 \u2013 Finanzen', open:false, items:[
+      { id:'top6', label:'TOP 6 \u2013 Finanzen', on:true }
+    ]}] : []),
+    { id:'g7', title:'TOP 7 \u2013 Antr\u00e4ge', open:false, expandable:true, items:[
+      { id:'7-1', label:'7.1 \u2013 Antrag (Platzhalter 1)', on:false },
+      { id:'7-2', label:'7.2 \u2013 Antrag (Platzhalter 2)', on:false },
+      { id:'7-3', label:'7.3 \u2013 Antrag (Platzhalter 3)', on:false }
+    ]},
+    { id:'g8', title:'TOP 8 \u2013 Wahlen', open:false, expandable:true, items:
+      mode === 'fas'
+        ? [{ id:'8-1', label:'8.1 \u2013 Wahl einer:s Projektleitenden', on:false }]
+        : [{ id:'8-1', label:'8.1 \u2013 Wahl einer:s Koordinator:in', on:false },
+           { id:'8-2', label:'8.2 \u2013 Wahl einer:s Referent:in',    on:false }]
+    },
+    { id:'g9', title:'TOP 9 \u2013 Diskussionen', open:false, expandable:true, items:[
+      { id:'9-1', label:'9.1 \u2013 Diskussion (Platzhalter)', on:false }
+    ]},
+    { id:'end', title:'Abschlusspunkte', fixed:true, open:true, items:[
+      { id:'top10', label:'TOP 10 \u2013 Sitzungstermine', on:true },
+      { id:'top11', label:'TOP 11 \u2013 Verschiedenes',   on:true }
+    ]}
+  ];
+}
+
+// Aktueller Zustand
+var dragState = { gid: null, fromIdx: null };  // Drag-&-Drop-Status
+var TOPS = getTopsForMode('fsv');
+var sel = {}, openState = {};
+TOPS.forEach(function(g) {
+  openState[g.id] = !!g.open;
+  g.items.forEach(function(it) { sel[it.id] = it.on; });
+});
+
+// ── Modus wechseln ────────────────────────────────────────────────────────────
+
+/** Wendet die Farben des gewählten Modus auf CSS-Variablen an. */
+function applyModeColors(mode) {
+  var m = MODES[mode];
+  var r = document.documentElement.style;
+  r.setProperty('--navy', m.navy);
+  r.setProperty('--blue', m.blue);
+  r.setProperty('--rwth', m.rwth);
+  r.setProperty('--bluel', m.bluel);
+}
+
+/**
+ * Wechselt den Sitzungstyp und passt Farben, TOPS und Formularfelder an.
+ * Die bisherige Auswahl wird zurückgesetzt.
+ */
+function setMode(mode, clickedBtn) {
+  currentMode = mode;
+  // TOPS neu laden und Zustand zurücksetzen
+  TOPS = getTopsForMode(mode);
+  sel = {}; openState = {};
+  TOPS.forEach(function(g) {
+    openState[g.id] = !!g.open;
+    g.items.forEach(function(it) { sel[it.id] = it.on; });
+  });
+  // Farben anwenden
+  applyModeColors(mode);
+  // Mode-Buttons aktualisieren
+  document.querySelectorAll('.mode-btn').forEach(function(b) {
+    b.classList.toggle('active', b === clickedBtn);
+  });
+  // Wahlperiode-Feld ein-/ausblenden
+  var wf = document.getElementById('field-wahlperiode');
+  if (wf) wf.style.display = MODES[mode].hasWahlperiode ? '' : 'none';
+  // AG-Name-Feld ein-/ausblenden
+  var agf = document.getElementById('field-agname');
+  if (agf) agf.style.display = (mode === 'ag') ? '' : 'none';
+  // Gremien-Gremium-Feld ein-/ausblenden
+  var vgf = document.getElementById('field-gremien-gremium');
+  if (vgf) vgf.style.display = (mode === 'gremien') ? '' : 'none';
+  // Ausschuss-Feld ein-/ausblenden
+  var ausf = document.getElementById('field-ausschuss');
+  if (ausf) ausf.style.display = (mode === 'ausschuss') ? '' : 'none';
+  if (mode === 'ausschuss') initAusschussDropdown();
+
+  // Sitzungstitel in der Kopfzeile aktualisieren
+  var sub = document.querySelector('.logo-sub');
+  if (sub) sub.textContent = MODES[mode].label + ' \u00b7 Maschinenbau \u00b7 RWTH Aachen';
+  renderTops();
+}
+
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UI-FUNKTIONEN
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Wechselt den aktiven Tab. */
+function showPage(page, tabEl) {
+  document.querySelectorAll('.page').forEach(function(x) { x.classList.remove('active'); });
+  document.querySelectorAll('.tab').forEach(function(x)  { x.classList.remove('active'); });
+  document.getElementById('page-' + page).classList.add('active');
+  tabEl.classList.add('active');
+}
+
+/** Öffnet/schließt eine TOP-Gruppe. */
+function toggleGroup(id) { openState[id] = !openState[id]; renderTops(); }
+
+/** Aktiviert/deaktiviert einen einzelnen TOP. */
+function toggleItem(id) { sel[id] = !sel[id]; renderTops(); }
+
+/** Aktiviert oder deaktiviert alle TOPs einer Gruppe auf einmal. */
+function toggleAll(gid, allWereOn) {
+  TOPS.find(function(x) { return x.id === gid; })
+      .items.forEach(function(it) { sel[it.id] = !allWereOn; });
+  renderTops();
+}
+
+/** Fügt einer erweiterbaren Gruppe einen neuen, benutzerdefinierten TOP hinzu. */
+function addItem(gid) {
+  var g = TOPS.find(function(x) { return x.id === gid; });
+  var newId = gid + '_u' + Date.now();
+  g.items.push({ id: newId, label: '', on: true, userAdded: true });
+  sel[newId] = true;
+  openState[gid] = true;
+  renderTops();
+  // Neues Textfeld automatisch fokussieren
+  setTimeout(function() {
+    var inputs = document.querySelectorAll('.user-inp');
+    if (inputs.length) inputs[inputs.length - 1].focus();
+  }, 30);
+}
+
+/** Entfernt einen benutzerdefinierten TOP aus einer Gruppe. */
+function removeItem(gid, iid) {
+  var g = TOPS.find(function(x) { return x.id === gid; });
+  g.items = g.items.filter(function(it) { return it.id !== iid; });
+  delete sel[iid];
+  renderTops();
+}
+
+/**
+ * Rendert die gesamte Tagesordnungsliste neu (vollständiger DOM-Rebuild).
+ * Wird bei jeder Zustandsänderung aufgerufen.
+ */
+function renderTops() {
+  var container = document.getElementById('tops-container');
+  container.innerHTML = '';
+
+  TOPS.forEach(function(group) {
+    var onCount = group.items.filter(function(it) { return sel[it.id]; }).length;
+    var allOn   = (onCount === group.items.length);
+
+    // Äußere Gruppe
+    var groupEl = document.createElement('div');
+    groupEl.className = 'top-group' + (openState[group.id] ? ' group-open' : '');
+
+    // ── Gruppen-Header ─────────────────────────────────────────────────────
+    var header = document.createElement('div');
+    header.className = 'group-header';
+    (function(gid) { header.onclick = function() { toggleGroup(gid); }; })(group.id);
+
+    var titleSpan = document.createElement('span');
+    titleSpan.className = 'group-title';
+    titleSpan.textContent = group.title;
+    header.appendChild(titleSpan);
+
+    var metaSpan = document.createElement('span');
+    metaSpan.className = 'group-meta';
+
+    // Zähler-Badge
+    var badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = onCount + '/' + group.items.length;
+    metaSpan.appendChild(badge);
+
+    // "Alle an/ab"-Button (nur für nicht-fixe Gruppen)
+    if (!group.fixed) {
+      var allBtn = document.createElement('button');
+      allBtn.className = 'btn-tiny';
+      allBtn.textContent = allOn ? 'Alle ab' : 'Alle an';
+      (function(gid, ao) {
+        allBtn.onclick = function(e) { e.stopPropagation(); toggleAll(gid, ao); };
+      })(group.id, allOn);
+      metaSpan.appendChild(allBtn);
+    }
+
+    // "+ Hinzufügen"-Button (nur für erweiterbare Gruppen)
+    if (group.expandable) {
+      var addBtn = document.createElement('button');
+      addBtn.className = 'btn-tiny';
+      addBtn.textContent = '+ Hinzuf\u00fcgen';
+      addBtn.title = 'Weiteren Punkt hinzuf\u00fcgen';
+      (function(gid) {
+        addBtn.onclick = function(e) { e.stopPropagation(); addItem(gid); };
+      })(group.id);
+      metaSpan.appendChild(addBtn);
+    }
+
+    // Chevron-Pfeil
+    var chev = document.createElement('span');
+    chev.className = 'chev';
+    chev.textContent = '\u25be';
+    metaSpan.appendChild(chev);
+    header.appendChild(metaSpan);
+    groupEl.appendChild(header);
+
+    // ── Gruppen-Inhalt (einzelne TOPs) ─────────────────────────────────────
+    var bodyEl = document.createElement('div');
+    bodyEl.className = 'group-body';
+
+    group.items.forEach(function(item, itemIdx) {
+      var itemEl = document.createElement('div');
+      itemEl.className = 'top-item' + (sel[item.id] ? ' on' : '');
+      if (!item.userAdded) {
+        (function(id) { itemEl.onclick = function() { toggleItem(id); }; })(item.id);
+      }
+
+      // ── Drag Handle & Events (nur für erweiterbare Gruppen) ─────────────
+      if (group.expandable) {
+        itemEl.draggable = true;
+        var handle = document.createElement('span');
+        handle.className = 'drag-handle';
+        handle.textContent = '\u22ee\u22ee';
+        handle.title = 'Ziehen zum Umsortieren';
+        itemEl.appendChild(handle);
+        (function(gid, idx) {
+          itemEl.addEventListener('dragstart', function(e) {
+            dragState = { gid: gid, fromIdx: idx };
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', '');
+            setTimeout(function() { itemEl.classList.add('dragging'); }, 0);
+          });
+          itemEl.addEventListener('dragend', function() {
+            itemEl.classList.remove('dragging');
+            document.querySelectorAll('.top-item.drag-over').forEach(function(el) {
+              el.classList.remove('drag-over');
+            });
+          });
+          itemEl.addEventListener('dragover', function(e) {
+            if (dragState.gid !== gid) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+          });
+          itemEl.addEventListener('dragenter', function(e) {
+            if (dragState.gid !== gid || dragState.fromIdx === idx) return;
+            e.preventDefault();
+            document.querySelectorAll('.top-item.drag-over').forEach(function(el) {
+              el.classList.remove('drag-over');
+            });
+            itemEl.classList.add('drag-over');
+          });
+          itemEl.addEventListener('drop', function(e) {
+            e.preventDefault();
+            itemEl.classList.remove('drag-over');
+            if (dragState.gid !== gid || dragState.fromIdx === idx) return;
+            var from = dragState.fromIdx;
+            var to = idx;
+            var g = TOPS.find(function(x) { return x.id === gid; });
+            var arr = g.items.slice();
+            var moved = arr.splice(from, 1)[0];
+            if (from < to) to--;   // Index nach dem Entfernen anpassen
+            arr.splice(to, 0, moved);
+            g.items = arr;
+            dragState = { gid: null, fromIdx: null };
+            renderTops();
+          });
+        })(group.id, itemIdx);
+      }
+
+      // Checkbox
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!sel[item.id];
+      (function(id) {
+        cb.onclick = function(e) { e.stopPropagation(); toggleItem(id); };
+      })(item.id);
+      itemEl.appendChild(cb);
+
+      if (item.userAdded || group.expandable) {
+        // Benutzerdefinierter oder editierbarer Beispiel-Eintrag: editierbares Textfeld
+        var inp = document.createElement('input');
+        inp.type = 'text';
+        inp.className = 'user-inp';
+        inp.placeholder = 'Titel des Punktes...';
+        inp.value = item.label;
+        (function(id) {
+          inp.addEventListener('input', function() {
+            // Label im TOPS-Datenmodell aktualisieren
+            TOPS.forEach(function(g) {
+              g.items.forEach(function(i) { if (i.id === id) i.label = inp.value; });
+            });
+          });
+          inp.onclick = function(e) { e.stopPropagation(); };
+        })(item.id);
+        itemEl.appendChild(inp);
+
+        if (item.userAdded) {
+          var delBtn = document.createElement('button');
+          delBtn.className = 'del-btn';
+          delBtn.textContent = '\u00d7';
+          delBtn.title = 'Entfernen';
+          (function(gid, iid) {
+            delBtn.onclick = function(e) { e.stopPropagation(); removeItem(gid, iid); };
+          })(group.id, item.id);
+          itemEl.appendChild(delBtn);
+        }
+      } else {
+        // Vordefinierter Eintrag: nur Text
+        var lbl = document.createElement('span');
+        lbl.textContent = item.label;
+        itemEl.appendChild(lbl);
+      }
+
+      bodyEl.appendChild(itemEl);
+    });
+
+    groupEl.appendChild(bodyEl);
+    container.appendChild(groupEl);
+  });
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MARKDOWN-VORLAGEN-GENERATOR
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Liefert die aktuell eingegebenen Sitzungsmetadaten – abhängig vom Modus. */
+function getMeta() {
+  var m = MODES[currentMode];
+  return {
+    sitzung:     document.getElementById('m-sitzung').value     || 'X',
+    date:        document.getElementById('m-date').value        || 'TT.MM.JJJJ',
+    ort:         getOrtValue()                                  || 'Ort',
+    wahlperiode: m.hasWahlperiode ? (document.getElementById('m-wahlperiode').value || '20XX-20XX') : '',
+    leitung:     document.getElementById('m-leitung').value     || 'Sitzungsleitung',
+    proto:       document.getElementById('m-proto').value       || 'Protokollf\u00fchrung',
+    beginn:      '',  // wird durch @Beginn() im Protokoll gesetzt
+    ende:        '',  // wird durch @Ende() im Protokoll gesetzt
+    gremium:     m.gremium,
+    modeLabel:   m.label,
+    agname:      document.getElementById('m-agname') ? document.getElementById('m-agname').value.trim() : '',
+    gremienGremium: document.getElementById('m-gremien-gremium') ? document.getElementById('m-gremien-gremium').value.trim() : '',
+    ausschuss:   document.getElementById('m-ausschuss') ? document.getElementById('m-ausschuss').value.trim() : ''
+  };
+}
+
+/**
+ * Extrahiert den eigentlichen Titel eines TOPs (ohne numerisches Präfix).
+ * Beispiel: "5.1 – Bericht des GF" → "Bericht des GF"
+ */
+function getItemTitle(label) {
+  return (label.replace(/^\d+[\.\d]*\s*[\u2013\-]+\s*/, '') || label).trim();
+}
+
+/**
+ * Baut die komplette Markdown-Vorlage anhand der aktuellen Auswahl.
+ * Gibt einen String mit YAML-Frontmatter + Tagesordnung + Anwesenheitsliste
+ * + Protokollgerüst zurück.
+ */
+function buildMd() {
+  var m    = getMeta();
+  var toc  = [];   // Tagesordnungszeilen
+  var body = [];   // Protokollinhalt
+  var n    = 1;    // Laufende TOP-Nummer
+
+  /**
+   * Fügt einen einfachen TOP (ohne Unterpunkte) hinzu.
+   * @param {string} label   - Titel des TOPs (ohne "TOP N –")
+   * @param {Array}  subs    - Optionale Untereinträge für das Inhaltsverzeichnis
+   * @param {string} content - Protokoll-Vorlagetext
+   */
+  function addTop(label, subs, content) {
+    toc.push('TOP ' + n + ' \u2013 ' + label);
+    if (subs) {
+      subs.forEach(function(s) { toc.push('    ' + s); });
+    }
+    if (content) {
+      // Überschrift im Protokoll enthält die TOP-Nummer
+      body.push('### TOP ' + n + ' \u2013 ' + label + '\n\n' + content + '\n');
+    }
+    n++;
+  }
+
+  // ── Standardpunkte ───────────────────────────────────────────────────────
+  if (currentMode === 'ag' || currentMode === 'gremien') {
+    // AG / Vorb: Eröffnung ohne Beschlussfähigkeit
+    if (sel['top1']) addTop('Er\u00f6ffnung der Sitzung', null,
+      '> Die Sitzungsleitung er\u00f6ffnet die Sitzung um XX:XX Uhr.\n\n@Beginn(XX:XX)');
+    if (sel['top2']) addTop('Mitteilung der Sitzungsleitung', null, 'Keine Mitteilungen.');
+
+    // Themen
+    var themen = (TOPS.find(function(g){return g.id==='g_themen';}) || {items:[]}).items
+                 .filter(function(it){ return sel[it.id]; });
+    if (themen.length > 0) {
+      var tn = n;
+      toc.push('TOP ' + n + ' \u2013 Themen');
+      themen.forEach(function(it, i) {
+        toc.push('    TOP ' + tn + '.' + (i+1) + ' \u2013 ' + (it.label || 'Thema '+(i+1)));
+      });
+      body.push('### TOP ' + n + ' \u2013 Themen\n');
+      themen.forEach(function(it, i) {
+        var t = it.label || ('Thema ' + (i+1));
+        body.push('#### TOP ' + tn + '.' + (i+1) + ' \u2013 ' + t + '\n\n' +
+                  'F: ...\n\nA: ...\n');
+      });
+      n++;
+    }
+  } else if (currentMode === 'ausschuss') {
+    // Ausschuss: Eröffnung inkl. Beschlussfähigkeit, Mitteilung des Vorsitzenden, Genehmigung der TO
+    if (sel['top1']) addTop('Eröffnung und Beschlussfähigkeit', null,
+      '> Die Sitzungsleitung eröffnet die Sitzung um XX:XX Uhr und stellt die Beschlussfähigkeit fest.\n\n@Beginn(XX:XX)');
+    if (sel['top2']) addTop('Mitteilung des Vorsitzenden', null, 'Keine Mitteilungen.');
+    if (sel['top3']) addTop('Genehmigung der Tagesordnung', null,
+      '> Die Sitzungsleitung stellt den Entwurf zur Tagesordnung vor.\n\n' +
+      '```\nDie Tagesordnung wird um XX:XX Uhr angenommen. (M/0/0)\n```'
+    );
+  } else {
+    // FSV / FaS
+    if (sel['top1']) addTop(
+      'Er\u00f6ffnung der Sitzung und Feststellen der Beschlussf\u00e4higkeit',
+      null,
+      '> Die Sitzungsleitung er\u00f6ffnet die Sitzung um XX:XX Uhr und stellt die Beschlussf\u00e4higkeit fest.\n\n@Beginn(XX:XX)'
+    );
+
+    var top2label = currentMode === 'fas' ? 'Mitteilung der Vorsitzenden' : 'Mitteilung des Pr\u00e4sidiums';
+    if (sel['top2']) addTop(top2label, null, 'Keine Mitteilungen.');
+
+    if (sel['top3']) addTop('Genehmigung der Tagesordnung', null,
+      '> Die Sitzungsleitung stellt den Entwurf zur Tagesordnung vor.\n\n' +
+      '```\nDie Tagesordnung wird um XX:XX Uhr angenommen. (M/0/0)\n```'
+    );
+
+    if (sel['top4']) addTop('Genehmigung von Protokollen', null,
+      '**Protokoll der X. Sitzung (Proto1, Proto2)**\n\n' +
+      '```\nDas Protokoll wird um XX:XX Uhr mit (M/0/0) angenommen.\n```'
+    );
+  }  // end else (FSV/FaS)
+
+  // ── TOP 5: Berichte (nur FSV/FaS) ─────────────────────────────────────────
+  if (currentMode === 'fsv' || currentMode === 'fas') {
+  var berichte = (TOPS[1] || {items:[]}).items.filter(function(it) { return sel[it.id]; });
+  if (berichte.length > 0) {
+    var bn = n;
+    var berichteTitel = (TOPS.find(function(g){return g.id==='g5';})||{title:'Berichte'}).title.replace(/^TOP \d+ \u2013 /,'');
+    toc.push('TOP ' + n + ' \u2013 ' + berichteTitel);
+    berichte.forEach(function(it, i) {
+      toc.push('    TOP ' + bn + '.' + (i + 1) + ' \u2013 ' + getItemTitle(it.label));
+    });
+
+    body.push('### TOP ' + n + ' \u2013 ' + berichteTitel + '\n');
+    berichte.forEach(function(it, i) {
+      var subTitle = getItemTitle(it.label);
+      // F: und A: mit Zeilenumbruch (zwei Leerzeichen vor \n = Markdown-Zeilenumbruch)
+      body.push(
+        '#### TOP ' + bn + '.' + (i + 1) + ' \u2013 ' + subTitle + '\n\n' +
+        '- \n- \n- \n\n' +
+        'Zuk\u00fcnftig:\n\n- \n\n' +
+        'F: ...\n\nA: ...\n'
+      );
+    });
+    n++;
+  }
+
+  // ── TOP 6: Finanzen (nur FSV) ───────────────────────────────────────────
+  if (currentMode === 'fsv' && sel['top6']) addTop('Finanzen', null,
+    '> Die Koordination f\u00fcr Finanzen stellt eine Präsentation zur aktuellen Haushaltslage vor.\n\n' +
+    'F: ...\n\nA: ...'
+  );
+  }  // end if (currentMode === 'fsv' || currentMode === 'fas') — Berichte/Finanzen
+
+  // ── TOP 7: Anträge (FSV, FaS, Ausschüsse) ─────────────────────────────────
+  if (currentMode === 'fsv' || currentMode === 'fas' || currentMode === 'ausschuss') {
+  var antraege = (TOPS.find(function(g){return g.id==='g7';})||{items:[]}).items.filter(function(it) { return sel[it.id]; });
+  if (antraege.length > 0) {
+    var an = n;
+    toc.push('TOP ' + n + ' \u2013 Antr\u00e4ge');
+    antraege.forEach(function(it, i) {
+      toc.push('    TOP ' + an + '.' + (i + 1) + ' \u2013 ' + (getItemTitle(it.label) || 'Antrag ' + (i + 1)));
+    });
+
+    body.push('### TOP ' + n + ' \u2013 Antr\u00e4ge\n');
+    antraege.forEach(function(it, i) {
+      var t = getItemTitle(it.label) || ('Antrag ' + (i + 1));
+      body.push(
+        '#### TOP ' + an + '.' + (i + 1) + ' \u2013 ' + t + '\n\n' +
+        '> XYZ hat den Antrag gestellt und stellt diesen vor.\n\n' +
+        'F: ...\n\nA: ...\n\n' +
+        '```\nDer ' + t + ' in H\u00f6he von bis zu XXX,XX \u20ac wird um XX:XX Uhr mit (M/0/0) angenommen.\n```\n\n@Summe(0,00)\n'
+      );
+    });
+    n++;
+  } else {
+    addTop('Anträge', null, 'Es wurden keine Anträge eingereicht.');
+  }
+  }  // end if (currentMode === 'fsv' || currentMode === 'fas' || currentMode === 'ausschuss') — Anträge
+
+  // ── TOP 8: Wahlen (FSV, FaS) ────────────────────────────────────────────
+  if (currentMode === 'fsv' || currentMode === 'fas') {
+  var wahlen = (TOPS.find(function(g){return g.id==='g8';})||{items:[]}).items.filter(function(it) { return sel[it.id]; });
+  if (wahlen.length > 0) {
+    var wn = n;
+    toc.push('TOP ' + n + ' \u2013 Wahlen');
+    wahlen.forEach(function(it, i) {
+      toc.push('    TOP ' + wn + '.' + (i + 1) + ' \u2013 ' + (getItemTitle(it.label) || 'Wahl ' + (i + 1)));
+    });
+
+    body.push('### TOP ' + n + ' \u2013 Wahlen\n');
+    wahlen.forEach(function(it, i) {
+      var t = getItemTitle(it.label) || ('Wahl ' + (i + 1));
+      body.push(
+        '#### TOP ' + wn + '.' + (i + 1) + ' \u2013 ' + t + '\n\n' +
+        '**Vorschl\u00e4ge:**\n\n- \n\n' +
+        '> XYZ \u2013 *w\u00fcrde die Wahl annehmen*\n\n' +
+        '**Vorstellung:**\n\n- ...\n\n' +
+        '**Befragung:**\n\nF: ...\n\nA: ...\n\n' +
+        '**Wirklich wichtige Fragen:**\n\nF: ...\n\nA: ...\n\n' +
+        '**Personaldebatte:**\n\n- \n\n' +
+        '```\nXYZ wird um XX:XX Uhr mit (M/0/0) gew\u00e4hlt.\n```\n'
+      );
+    });
+    n++;
+  } else {
+    addTop('Wahlen', null, 'Es gibt keine offenen Wahlen.');
+  }
+  }  // end if (currentMode === 'fsv' || currentMode === 'fas') — Wahlen
+
+  // ── Diskussionen (alle Modi – laut Ordnung zwingend zu behandeln) ─────────
+  var diskItems = (TOPS.find(function(g){return g.id==='g9';}) || {items:[]}).items
+                 .filter(function(it){ return sel[it.id]; });
+  if (diskItems.length > 0) {
+    var dn = n;
+    toc.push('TOP ' + n + ' \u2013 Diskussionen');
+    diskItems.forEach(function(it, i) {
+      toc.push('    TOP ' + dn + '.' + (i+1) + ' \u2013 ' + (getItemTitle(it.label) || 'Diskussion ' + (i+1)));
+    });
+    body.push('### TOP ' + n + ' \u2013 Diskussionen\n');
+    diskItems.forEach(function(it, i) {
+      var t = getItemTitle(it.label) || ('Diskussion ' + (i+1));
+      body.push('#### TOP ' + dn + '.' + (i+1) + ' \u2013 ' + t + '\n\nF: ...\n\nA: ...\n');
+    });
+    n++;
+  } else {
+    addTop('Diskussionen', null, 'Es wurden keine Diskussionen eingereicht.');
+  }
+
+  // ── Abschlusspunkte (modusabhängig) ─────────────────────────────────────
+  var sitzungsterminText = currentMode === 'ag'
+    ? 'Die n\u00e4chste AG-Sitzung ist am XX.XX.202X um XX:XX Uhr.'
+    : currentMode === 'gremien'
+    ? 'Die n\u00e4chste Vorbesprechung ist am XX.XX.202X um XX:XX Uhr.'
+    : currentMode === 'ausschuss'
+    ? 'Die n\u00e4chste Ausschusssitzung ist am XX.XX.202X um XX:XX Uhr.'
+    : ('Die n\u00e4chste ' + (currentMode === 'fas' ? 'FaS' : 'FSV-Sitzung') +
+       ' ist am XX.XX.202X um 19:00 Uhr im ' + m.ort + '.');
+
+  if (sel['top10'] || sel['top_termine']) addTop('Sitzungstermine', null, sitzungsterminText);
+  if (sel['top11'] || sel['top_versch'])  addTop('Verschiedenes', null, '\n\n>Die Sitzung wird um XX:XX Uhr geschlossen.\n\n@Ende(XX:XX)');
+
+  // ── Zusammenbauen ────────────────────────────────────────────────────────
+  var agLabel   = (currentMode === 'ag'   && m.agname)      ? m.agname      + '-Sitzung'    : 'AG-Sitzung';
+  var gremienLabel = (currentMode === 'gremien' && m.gremienGremium) ? m.gremienGremium + '-Vorbesprechung' : 'Vorbesprechung';
+  var ausschussLabel = (currentMode === 'ausschuss' && m.ausschuss) ? m.ausschuss + '-Sitzung' : 'Ausschuss-Sitzung';
+  var titleStr = currentMode === 'ag'
+    ? ('Protokoll der ' + m.sitzung + '. ' + agLabel)
+    : currentMode === 'gremien'
+    ? ('Protokoll der ' + m.sitzung + '. ' + gremienLabel)
+    : currentMode === 'ausschuss'
+    ? ('Protokoll der ' + m.sitzung + '. ' + ausschussLabel)
+    : ('Protokoll der ' + m.sitzung + '. ' + (currentMode === 'fas' ? 'FaS' : 'FSV') + '-Sitzung');
+
+  var frontmatter =
+    '---\n' +
+    'title: "' + titleStr + '"\n' +
+    'date: "' + m.date + '"\n' +
+    (m.gremium     ? 'gremium: "'     + m.gremium     + '"\n' : '') +
+    (currentMode === 'ag'        && m.agname         ? 'agname: "'      + m.agname         + '"\n' : '') +
+    (currentMode === 'gremien'   && m.gremienGremium ? 'gremiumname: "' + m.gremienGremium + '"\n' : '') +
+    (currentMode === 'ausschuss' && m.ausschuss      ? 'ausschuss: "'   + m.ausschuss      + '"\n' : '') +
+    (m.wahlperiode ? 'wahlperiode: "' + m.wahlperiode + '"\n' : '') +
+    'sitzung: ' + m.sitzung + '\n' +
+    'ort: "' + m.ort + '"\n' +
+    'sitzungsleitung: "' + m.leitung + '"\n' +
+    'protokollfuehrung: "' + m.proto + '"\n' +
+    'beginn: "' + m.beginn + '"\n' +
+    'ende: "' + m.ende + '"\n' +
+    '---\n\n';
+
+  // Für die separate Tagesordnungs-PDF (siehe btn-dl-agenda) merken: buildMd()
+  // ist die einzige Stelle, die TOC-Zeilen und Titel modusabhängig ermittelt.
+  LAST_AGENDA_DATA = { toc: toc.slice(), titleStr: titleStr, m: m };
+
+  return frontmatter +
+         '## Tagesordnung\n\n[TOC]\n\n' +
+         buildAttendanceMd() +
+         '## Protokoll\n\n' + body.join('\n');
+}
+
+/** Kürzt eine Wahlperiode für den Dateinamen: "2025-2026" → "-2526" */
+function shortWp(wp) {
+  if (!wp) return '';
+  var parts = wp.split('-');
+  if (parts.length === 2) {
+    return '-' + parts[0].slice(-2) + parts[1].slice(-2);
+  }
+  return '-' + wp;
+}
+
+// Download-Button: Markdown-Datei herunterladen
+document.getElementById('btn-dl-md').addEventListener('click', function() {
+  var md  = buildMd();
+  var m   = getMeta();
+  var blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href     = url;
+  var modeShort = currentMode === 'gremien' ? 'GREMIEN' : currentMode.toUpperCase();
+  var wpShort   = shortWp(m.wahlperiode);
+  a.download = 'Protokoll-' + modeShort + wpShort + '-Sitzung-' + String(m.sitzung).padStart(2, '0') + '.md';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+});
+
+// Tagesordnung-Button: kompaktes PDF mit Metadaten + TOP-Liste zum Vorab-Verschicken
+document.getElementById('btn-dl-agenda').addEventListener('click', function() {
+  var btn = this;
+  buildMd(); // Nebeneffekt: befüllt LAST_AGENDA_DATA mit toc/titleStr/m für den aktuellen Modus
+  var data = LAST_AGENDA_DATA;
+  if (!data || !data.toc.length) { alert('Bitte zuerst mindestens einen Tagesordnungspunkt auswählen.'); return; }
+
+  var meta = {
+    sitzung: data.m.sitzung, date: data.m.date, ort: data.m.ort, wahlperiode: data.m.wahlperiode,
+    sitzungsleitung: data.m.leitung, protokollfuehrung: data.m.proto,
+    gremium: data.m.gremium, agname: data.m.agname, gremiumname: data.m.gremienGremium,
+    ausschuss: data.m.ausschuss, beginn: '', ende: ''
+  };
+
+  btn.disabled = true;
+  Promise.all([loadPdfFonts(), loadLogoSvg()]).then(function(results) {
+    var docDefinition = buildAgendaDocDefinition(meta, data.toc, pdfModeColors(), results[1]);
+    var modeShort = currentMode === 'gremien' ? 'GREMIEN' : currentMode.toUpperCase();
+    var filename = 'Tagesordnung-' + modeShort + shortWp(meta.wahlperiode) + '-Sitzung-' + String(meta.sitzung || 'X').padStart(2, '0') + '.pdf';
+    pdfMake.createPdf(docDefinition).download(filename);
+    btn.disabled = false;
+  }).catch(function(err) {
+    btn.disabled = false;
+    alert('Fehler bei der PDF-Erzeugung: ' + err.message);
+  });
+});
+
+
+// Kopieren-Button: Markdown in Zwischenablage
+document.getElementById('btn-copy-md').addEventListener('click', function() {
+  var md = buildMd();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(md).then(function() {
+      var btn = document.getElementById('btn-copy-md');
+      var orig = btn.innerHTML;
+      btn.innerHTML = '&#10003; Kopiert!';
+      btn.style.color = 'var(--navy)';
+      setTimeout(function() { btn.innerHTML = orig; btn.style.color = ''; }, 2000);
+    }).catch(function() { alert('Kopieren fehlgeschlagen.'); });
+  } else {
+    // Fallback für ältere Browser
+    var ta = document.createElement('textarea');
+    ta.value = md;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch(e) { alert('Kopieren fehlgeschlagen.'); }
+    document.body.removeChild(ta);
+  }
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DATEI-UPLOAD & VORSCHAU
+// ═══════════════════════════════════════════════════════════════════════════════
+
+var uploadedMd = '';  // Zuletzt hochgeladenes Markdown
+
+// Upload per Klick
+var uploadZone = document.getElementById('upload-zone');
+uploadZone.addEventListener('click', function() { document.getElementById('file-input').click(); });
+
+// Upload per Drag & Drop
+uploadZone.addEventListener('dragover', function(e) { e.preventDefault(); uploadZone.classList.add('drag'); });
+uploadZone.addEventListener('dragleave', function()  { uploadZone.classList.remove('drag'); });
+uploadZone.addEventListener('drop', function(e) {
+  e.preventDefault();
+  uploadZone.classList.remove('drag');
+  if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+});
+document.getElementById('file-input').addEventListener('change', function() {
+  if (this.files[0]) processFile(this.files[0]);
+});
+
+/** Liest eine hochgeladene Markdown-Datei ein und aktualisiert die Vorschau. */
+function processFile(file) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    // Zeilenenden normalisieren (\r\n → \n), da Windows-Dateien sonst Regex-Matches brechen
+    uploadedMd = e.target.result.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    // Status anzeigen
+    var st = document.getElementById('file-status');
+    st.style.display = 'block';
+    st.textContent = '\u2713 ' + file.name + ' geladen';
+
+    // Karten einblenden und Vorschau rendern
+    document.getElementById('preview-card').style.display = 'block';
+    document.getElementById('pdf-card').style.display     = 'block';
+    document.getElementById('preview-raw').textContent    = uploadedMd;
+    showRenderedView();
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+/**
+ * Bereitet das Markdown für die gerenderte Vorschau vor.
+ * Problem: Tagesordnungszeilen stehen ohne Leerzeilen nebeneinander und
+ * werden von Markdown-Parsern als ein Fließtext zusammengezogen.
+ * Lösung: Im Tagesordnungsabschnitt erhalten alle Zeilen zwei trailing
+ * Leerzeichen (= Markdown-Zeilenumbruch), und Einrückungen werden
+ * mit Non-Breaking-Spaces dargestellt.
+ */
+function preprocessForPreview(md) {
+  var inToc = false;
+  return md.split('\n').map(function(line) {
+    // Sektionserkennung
+    if (line === '## Tagesordnung') { inToc = true;  return line; }
+    if (line.indexOf('## ') === 0)  { inToc = false; return line; }
+    if (!inToc || !line.trim())     { return line; }
+
+    var isIndented = /^\s{2,}/.test(line);
+    return (isIndented ? '\u00a0\u00a0\u00a0\u00a0' : '') + line.trim() + '  ';
+  }).join('\n');
+}
+
+/** Zeigt die rohe Markdown-Quelle. */
+function showMdView() {
+  document.getElementById('preview-raw').style.display     = 'block';
+  document.getElementById('preview-content').style.display = 'none';
+  document.getElementById('btn-md-view').className       = 'btn btn-primary';
+  document.getElementById('btn-rendered-view').className = 'btn btn-sec';
+}
+
+/** Rendert das Markdown als formatiertes HTML. */
+function showRenderedView() {
+  var raw  = uploadedMd.replace(/^---[\s\S]*?---\n/, '');
+  var prep = preprocessForPreview(raw);
+  document.getElementById('preview-content').innerHTML  = marked.parse(prep);
+  document.getElementById('preview-content').style.display = 'block';
+  document.getElementById('preview-raw').style.display     = 'none';
+  document.getElementById('btn-rendered-view').className = 'btn btn-primary';
+  document.getElementById('btn-md-view').className       = 'btn btn-sec';
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PDF-HILFSFUNKTIONEN
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Aktualisiert die Fortschrittsanzeige. */
+function setProgress(pct, label) {
+  document.getElementById('pf').style.width = pct + '%';
+  if (label) document.getElementById('pl').textContent = label;
+}
+
+/** HTML-Escaping für Text in generierten Strings. */
+function esc(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** CSS-String-Escaping (für content-Werte in @page-Regeln). */
+function cssEsc(s) {
+  return (s || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+/**
+ * Erstellt einen URL-sicheren Anker aus beliebigem Text.
+ * Wandelt Umlaute um und entfernt Sonderzeichen.
+ */
+function slugify(text) {
+  return text.toLowerCase()
+    .replace(/\u00e4/g, 'ae').replace(/\u00f6/g, 'oe')
+    .replace(/\u00fc/g, 'ue').replace(/\u00df/g, 'ss')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/**
+ * Extrahiert den Textinhalt eines Markdown-Abschnitts (## Heading).
+ * Liefert alles zwischen dieser Überschrift und der nächsten ## -Überschrift.
+ */
+function extractSection(body, heading) {
+  var re = new RegExp('## ' + heading + '\\n+([\\s\\S]*?)(?=\\n## |$)');
+  var m  = body.match(re);
+  return m ? m[1].trim() : '';
+}
+
+/**
+ * Parst die Tagesordnungszeilen aus dem Tagesordnungs-Abschnitt.
+ * Erkennt Einrückung als Hierarchieebene (level 0 = Haupt-TOP, level 1 = Sub-TOP).
+ */
+function parseTocLines(tocText) {
+  var items = [];
+  tocText.split('\n').forEach(function(line) {
+    if (!line.trim()) return;
+    var isIndented = /^\s{2,}/.test(line);
+    // Entfernt eventuelle Markdown-Listenzeichen (Rückwärtskompatibilität)
+    var text = line.trim().replace(/^\d+\.\s+/, '').replace(/^[-*]\s+/, '');
+    if (text) items.push({ text: text, level: isIndented ? 1 : 0 });
+  });
+  return items;
+}
+
+/**
+ * Fügt id-Attribute zu allen h3- und h4-Elementen im HTML hinzu.
+ * Die IDs werden per slugify() aus dem Textinhalt generiert und dienen
+ * als Sprungziel für die Tagesordnungs-Links.
+ */
+function addHeadingIds(html) {
+  var div = document.createElement('div');
+  div.innerHTML = html;
+  div.querySelectorAll('h3, h4').forEach(function(el) {
+    el.id = slugify(el.textContent.trim());
+  });
+  return div.innerHTML;
+}
+
+/**
+ * Findet alle Beschlüsse (code-Blöcke in pre-Tags) im Protokoll-HTML
+ * und ordnet ihnen die jeweils vorangehende Überschrift zu.
+ */
+function extractBeschluesse(protocolHtml) {
+  var div     = document.createElement('div');
+  div.innerHTML = protocolHtml;
+  var results = [];
+  var heading  = '';
+  var nodes    = div.children;
+
+  // Sucht @Summe(X,XX) oder @summe(X,XX) in Textinhalt eines Elements
+  function findSumme(el) {
+    var m = (el ? el.textContent : '').match(/@[Ss]umme\((\d[\d.,]*)\)/);
+    return m ? parseFloat(m[1].replace(/\./g, '').replace(',', '.')) : null;
+  }
+
+  for (var i = 0; i < nodes.length; i++) {
+    var tag = nodes[i].tagName;
+    if (tag === 'H3' || tag === 'H4') {
+      heading = nodes[i].textContent.trim();
+    } else if (tag === 'PRE') {
+      var code = nodes[i].querySelector('code');
+      if (code) {
+        var summe = null;
+        // Vorwärts suchen bis zur nächsten Überschrift
+        for (var j = i + 1; j < nodes.length && j < i + 15; j++) {
+          var tj = nodes[j].tagName;
+          if (tj === 'H3' || tj === 'H4') break;
+          summe = findSumme(nodes[j]);
+          if (summe !== null) break;
+        }
+        // Rückwärts suchen bis zur aktuellen Überschrift
+        if (summe === null) {
+          for (var j = i - 1; j >= 0; j--) {
+            var tj = nodes[j].tagName;
+            if (tj === 'H3' || tj === 'H4') break;
+            summe = findSumme(nodes[j]);
+            if (summe !== null) break;
+          }
+        }
+        results.push({ heading: heading, text: code.textContent.trim(), summe: summe });
+      }
+    }
+  }
+  return results;
+}
+
+/**
+ * Baut die TOC-Einträge aus den h3/h4-Überschriften des Protokoll-HTML.
+ * Ersetzt parseTocLines() wenn das Markdown [TOC] statt expliziter Liste enthält.
+ * h3 = Hauptpunkt (level 0), h4 = Unterpunkt (level 1)
+ */
+function buildTocFromProtocol(protocolHtml) {
+  var div = document.createElement('div');
+  div.innerHTML = protocolHtml;
+  var items = [];
+  div.querySelectorAll('h3, h4').forEach(function(el) {
+    items.push({
+      text:  el.textContent.trim(),
+      level: el.tagName === 'H3' ? 0 : 1
+    });
+  });
+  return items;
+}
+
+/** Erzeugt eine Metadaten-Zeile für die Deckblatt-Tabelle. */
+/**
+ * Entfernt @Summe()-Befehle aus dem gerenderten HTML.
+ * Wandelt Absätze die nur @Summe(...) enthalten in unsichtbare HTML-Kommentare um.
+ */
+/**
+ * Entfernt @-Befehle (@Summe, @Beginn, @Ende) aus dem gerenderten HTML.
+ * Absätze die nur einen solchen Befehl enthalten werden unsichtbar gemacht.
+ */
+function removeAtSumme(html) {
+  var div = document.createElement('div');
+  div.innerHTML = html;
+  div.querySelectorAll('p').forEach(function(p) {
+    if (/^@([Ss]umme|[Bb]eginn|[Ee]nde)\s*\(/.test(p.textContent.trim())) {
+      p.remove();
+    }
+  });
+  return div.innerHTML;
+}
+
+function metaRow(key, val) {
+  return '<div class="meta-row">' +
+           '<span class="meta-key">' + esc(key) + ':</span>' +
+           '<span class="meta-val">' + esc(val || '') + '</span>' +
+         '</div>\n';
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PDF-AUFBAU
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Bereinigt die Anwesenheitstabelle für die PDF-Ausgabe.
+ * Alle XXX-Platzhalter werden spaltenweise entfernt; die verbleibenden
+ * echten Namen werden aufgerückt, sodass keine Leerzeilen entstehen.
+ * Zeilen, in denen danach alle Spalten leer sind, werden gelöscht.
+ */
+function cleanAttendanceXxx(html) {
+  var div = document.createElement('div');
+  div.innerHTML = html;
+  var tbody = div.querySelector('tbody');
+  if (!tbody) return html;
+
+  var rows = Array.from(tbody.querySelectorAll('tr'));
+  if (!rows.length) return html;
+  var numCols = rows[0].querySelectorAll('td').length;
+  if (!numCols) return html;
+
+  // Spaltenweise alle echten Einträge (≠ XXX, ≠ leer) sammeln
+  var colValues = [];
+  for (var ci = 0; ci < numCols; ci++) colValues.push([]);
+  rows.forEach(function(row) {
+    var cells = row.querySelectorAll('td');
+    cells.forEach(function(td, ci) {
+      var text = td.textContent.trim();
+      if (text && text !== 'XXX') colValues[ci].push(text);
+    });
+  });
+
+  var maxLen = colValues.reduce(function(m, c) { return Math.max(m, c.length); }, 0);
+
+  // Tbody komplett neu aufbauen
+  tbody.innerHTML = '';
+  for (var ri = 0; ri < maxLen; ri++) {
+    var tr = document.createElement('tr');
+    for (var ci2 = 0; ci2 < numCols; ci2++) {
+      var td2 = document.createElement('td');
+      td2.textContent = colValues[ci2][ri] || '';
+      tr.appendChild(td2);
+    }
+    tbody.appendChild(tr);
+  }
+
+  return div.innerHTML;
+}
+
+/**
+ * Baut das vollständige HTML-Dokument für die PDF-Ausgabe zusammen.
+ *
+ * Seitenstruktur:
+ *   Seite 1  – Deckblatt (kein @page-Rand, kein Header/Footer)
+ *   Seite 2  – Tagesordnung (mit Kopf-/Fußzeile)
+ *   Seite 3  – Anwesenheitsliste (eigene Seite)
+ *   Seite 4+ – Protokolltext
+ *   letzte S.– Beschlusszusammenfassung (falls Beschlüsse vorhanden)
+ */
+// ═══════════════════════════════════════════════════════════════════════════════
+// PDF-AUFBAU (pdfmake) – erzeugt das PDF direkt im Browser, ohne Druckdialog
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function pmm(n) { return n * 2.83465; }
+
+var ABBR = [
+  ['StuPa', 'Studierendenparlament'], ['AStA', 'Allgemeiner Studierendenausschuss'],
+  ['FSMB', 'Fachschaft Maschinenbau'], ['FSV', 'Fachschaftsvertretung'],
+  ['KFSV', 'Konstituierende Sitzung der FSV'], ['FSVV', 'Fachschaftsvollversammlung'],
+  ['Rat', 'Fachschaftsrat'], ['FaS', 'Fachschaftssitzung'],
+  ['Md', 'Mitglied(-er) des/der'], ['ESA', 'Erstsemesterarbeit'],
+  ['StuBe', 'Studienrichtung und Beruf'], ['AG', 'Arbeitsgemeinschaft'],
+  ['CESler', 'Computational Engineering Science Studierende'],
+  ['WI', 'Wirtschaftsingenieurwesen (Fachrichtung Maschinenbau)'],
+  ['SP', 'SharePoint'], ['GO', 'Geschäftsordnung'], ['KVV', 'Kartenvorverkauf'],
+  ['HSZ', 'Hochschulsportzentrum'], ['(FS)VV', 'Fachschaftsvollversammlung'],
+  ['QVK', 'Qualitätsverbesserungskommission'],
+  ['WGP', 'Wissenschaftliche Gesellschaft für Produktionstechnik'],
+  ['WP', 'Wordpress'], ['SAP', 'Semesteranfangsparty'], ['RT', 'Regelungstechnik'],
+  ['AIA', 'Aerodynamisches Institut'], ['SBR', 'Studienbeirat'],
+  ['RKL', 'Rektoratskommission für Qualitätsmanagement in der Lehre'],
+  ['FH', 'Fachhochschule Aachen'], ['TK', 'Techniker Krankenkasse'], ['CP', 'Credit Points']
+];
+
+var ADDRESS_LINES = [
+  'Fachschaft Maschinenbau der RWTH Aachen', 'Eilfschornsteinstr. 18', '52062 Aachen', '',
+  'Sammelbau für Maschinenwesen (1220)', '1. OG, Raum 100', '',
+  'Tel: +49 241 80-95308', '', 'fsmb@rwth-aachen.de', 'www.fsmb.rwth-aachen.de'
+];
+
+var MODE_CHART_PALETTES = {
+  fsv:  ['#002B5C','#00468C','#00549F','#1A6FB5','#3385C6','#4D9BD6','#66B0E6','#80C5F6','#99D0FF','#B3DDFF'],
+  fas:  ['#8B0513','#AA0620','#CC071E','#D93040','#E55060','#EE7080','#F490A0','#F8B0BA','#FBD0D5','#FCEAEC'],
+  ag:   ['#3D3472','#5B549A','#7A6FAC','#72C040','#8DD060','#A8DE80','#BFE8A0','#D5F0C0','#E5F8D8','#F0FCF0'],
+  gremien: ['#2F5E15','#41801D','#57AB27','#6FC040','#88D45A','#A2E075','#BBE894','#D0F0B2','#E3F7D0','#F0FBEA'],
+  ausschuss: ['#1B4B73','#2E6DA4','#3E82C4','#5B97CE','#78ACD8','#95C1E2','#B2D6EC','#C7DDF2','#D8E8F5','#EAF3FA']
+};
+
+/**
+ * Lädt (einmalig) die Arimo-Schriftdateien (metrikkompatibel zu Arial, Apache-
+ * Lizenz) von Google Fonts nach und registriert sie bei pdfmake. Standard-PDF-
+ * Fonts wie Helvetica sind im Browser-Build von pdfmake nicht ohne eingebettete
+ * Schriftdaten nutzbar – daher die eigene, schlanke Schrifteinbettung.
+ */
+var pdfFontsReady = null;
+function loadPdfFonts() {
+  if (pdfFontsReady) return pdfFontsReady;
+  var FONT_URLS = {
+    'Arimo-Regular.ttf': 'https://fonts.gstatic.com/s/arimo/v36/P5sfzZCDf9_T_3cV7NCUECyoxNk37cxsBw.ttf',
+    'Arimo-Bold.ttf': 'https://fonts.gstatic.com/s/arimo/v36/P5sfzZCDf9_T_3cV7NCUECyoxNk3CstsBw.ttf',
+    'Arimo-Italic.ttf': 'https://fonts.gstatic.com/s/arimo/v36/P5sdzZCDf9_T_10c3i9MeUcyat4iJY-ERBrE.ttf',
+    'Arimo-BoldItalic.ttf': 'https://fonts.gstatic.com/s/arimo/v36/P5sdzZCDf9_T_10c3i9MeUcyat4iJY9jQxrE.ttf'
+  };
+  pdfFontsReady = Promise.all(Object.keys(FONT_URLS).map(function(name) {
+    return fetch(FONT_URLS[name]).then(function(r) {
+      if (!r.ok) throw new Error('Schriftdatei ' + name + ' konnte nicht geladen werden (' + r.status + ')');
+      return r.arrayBuffer();
+    }).then(function(buf) {
+      var bytes = new Uint8Array(buf), binary = '';
+      for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      return [name, btoa(binary)];
+    });
+  })).then(function(pairs) {
+    var vfs = {};
+    pairs.forEach(function(p) { vfs[p[0]] = p[1]; });
+    pdfMake.vfs = vfs;
+    pdfMake.fonts = {
+      Arimo: { normal: 'Arimo-Regular.ttf', bold: 'Arimo-Bold.ttf', italics: 'Arimo-Italic.ttf', bolditalics: 'Arimo-BoldItalic.ttf' }
+    };
+  }).catch(function(err) {
+    pdfFontsReady = null; // erneuter Versuch beim nächsten Aufruf erlauben
+    throw err;
+  });
+  return pdfFontsReady;
+}
+
+/** Kreisdiagramm "Beschlossene Ausgaben" als SVG (statt Canvas-Zeichnung). */
+function buildPieChartSvg(data, colors) {
+  var cx = 80, cy = 80, r = 75;
+  var total = data.reduce(function(s, v) { return s + v; }, 0);
+  var angle = -Math.PI / 2;
+  var paths = '';
+  data.forEach(function(v, i) {
+    var slice = (v / total) * 2 * Math.PI;
+    var x1 = cx + r * Math.cos(angle), y1 = cy + r * Math.sin(angle);
+    var end = angle + slice;
+    var x2 = cx + r * Math.cos(end), y2 = cy + r * Math.sin(end);
+    var largeArc = slice > Math.PI ? 1 : 0;
+    paths += '<path d="M' + cx + ',' + cy + ' L' + x1.toFixed(2) + ',' + y1.toFixed(2) +
+             ' A' + r + ',' + r + ' 0 ' + largeArc + ' 1 ' + x2.toFixed(2) + ',' + y2.toFixed(2) +
+             ' Z" fill="' + colors[i % colors.length] + '" stroke="#ffffff" stroke-width="1.5"/>';
+    angle = end;
+  });
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">' + paths + '</svg>';
+}
+
+// Emojis werden im PDF entfernt statt als kaputte Platzhalter-Kästchen
+// angezeigt: die pdfmake-Text-Engine kann keine farbigen Emoji-Glyphen
+// darstellen (technische Grenze, unabhängig von der eingebetteten Schrift).
+var EMOJI_REGEX = /[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}\u{20E3}]/gu;
+function stripEmoji(s) {
+  if (typeof s !== 'string') return s;
+  return s.replace(EMOJI_REGEX, '').replace(/ {2,}/g, ' ').replace(/ +([.,;:!?])/g, '$1');
+}
+
+// ── Inline-Text-Konvertierung (strong/em/a/code/br) ────────────────────────
+function inlineNodes(node) {
+  var out = [];
+  node.childNodes.forEach(function(child) {
+    if (child.nodeType === 3) {
+      out.push(stripEmoji(child.textContent));
+    } else if (child.nodeType === 1) {
+      var tag = child.tagName.toLowerCase();
+      if (tag === 'strong' || tag === 'b') out.push({ text: inlineNodes(child), bold: true });
+      else if (tag === 'em' || tag === 'i') out.push({ text: inlineNodes(child), italics: true });
+      else if (tag === 'a') out.push({ text: inlineNodes(child), link: child.getAttribute('href') || '' });
+      else if (tag === 'br') out.push('\n');
+      else out.push(inlineNodes(child));
+    }
+  });
+  return out;
+}
+
+// ── Block-Elemente (h3/h4/p/blockquote/pre/table/ul/ol) ────────────────────
+function pdfBlockquoteNode(el) {
+  var lines = [];
+  Array.from(el.children).forEach(function(p) {
+    lines.push({ text: inlineNodes(p), italics: true, color: '#666666', fontSize: 10.5, lineHeight: 1.3 });
+  });
+  return {
+    columns: [
+      { width: pmm(0.7), canvas: [{ type: 'rect', x: 0, y: 0, w: pmm(0.7), h: pmm(6 * lines.length), color: '#BFBFBF' }] },
+      { width: '*', stack: lines, margin: [pmm(2), 0, 0, 0] }
+    ],
+    margin: [0, pmm(1), 0, pmm(2)],
+    unbreakable: true
+  };
+}
+
+function pdfCodeBoxNode(el, ctx) {
+  var code = el.querySelector('code');
+  var text = stripEmoji(code ? code.textContent.trim() : el.textContent.trim());
+  return {
+    // lineHeight erzeugt zusätzlichen Nachlauf unterhalb der letzten Zeile;
+    // Top-/Bottom-Margin daher bewusst asymmetrisch, damit der Text im
+    // ausgefüllten Kasten optisch mittig steht (empirisch kalibriert).
+    table: { widths: ['*'], body: [[
+      { text: text, color: ctx.navy, bold: true, fontSize: 9.5, lineHeight: 1.15,
+        fillColor: ctx.bluel, margin: [pmm(4), pmm(3.5), pmm(4), pmm(2.5)] }
+    ]] },
+    layout: {
+      hLineWidth: function() { return 0; },
+      vLineWidth: function(i) { return i === 0 ? 3 : 0; },
+      vLineColor: function() { return ctx.blue; },
+      paddingLeft: function() { return 0; }, paddingRight: function() { return 0; },
+      paddingTop: function() { return 0; }, paddingBottom: function() { return 0; }
+    },
+    margin: [0, pmm(2), 0, pmm(2)],
+    unbreakable: true
+  };
+}
+
+function pdfHtmlTableNode(el, ctx) {
+  var rows = [];
+  var theadRow = el.querySelector('thead tr');
+  if (theadRow) {
+    rows.push(Array.from(theadRow.children).map(function(th) {
+      return { text: stripEmoji(th.textContent.trim()), color: '#ffffff', bold: true, fillColor: ctx.navy, fontSize: 9, margin: [4, 4, 4, 4] };
+    }));
+  }
+  el.querySelectorAll('tbody tr').forEach(function(tr) {
+    rows.push(Array.from(tr.children).map(function(td) {
+      return { text: inlineNodes(td), fontSize: 9.5, margin: [4, 4, 4, 4] };
+    }));
+  });
+  var numCols = rows[0] ? rows[0].length : 1;
+  return {
+    table: { headerRows: theadRow ? 1 : 0, widths: new Array(numCols).fill('*'), body: rows },
+    layout: {
+      hLineWidth: function(i) { return (i === 0 || i === 1) ? 0 : 0.5; },
+      vLineWidth: function() { return 0; },
+      hLineColor: function() { return '#DDDDD8'; },
+      fillColor: function(rowIndex) {
+        if (theadRow && rowIndex === 0) return null;
+        var dataRow = theadRow ? rowIndex - 1 : rowIndex;
+        return dataRow % 2 === 1 ? '#F5F7FA' : null;
+      }
+    },
+    margin: [0, pmm(2), 0, pmm(2)]
+  };
+}
+
+/** Lädt eine Bild-URL (data: oder http(s):) und liefert data:-URL + Pixelmaße; null bei Fehler. */
+function loadImageAsset(src) {
+  if (!src) return Promise.resolve(null);
+  var toDataUrl = src.indexOf('data:') === 0
+    ? Promise.resolve(src)
+    : fetch(src).then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.blob();
+      }).then(function(blob) {
+        return new Promise(function(resolve, reject) {
+          var reader = new FileReader();
+          reader.onload = function() { resolve(reader.result); };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      });
+  return toDataUrl.then(function(dataUrl) {
+    return new Promise(function(resolve, reject) {
+      var probe = new Image();
+      probe.onload = function() { resolve({ dataUrl: dataUrl, width: probe.naturalWidth, height: probe.naturalHeight }); };
+      probe.onerror = reject;
+      probe.src = dataUrl;
+    });
+  }).catch(function() { return null; });
+}
+
+/**
+ * Lädt alle im Protokoll referenzierten Bilder (data:- oder http(s)-URLs) vor
+ * und liefert eine Map src → { dataUrl, width, height } (bzw. null, wenn das
+ * Bild nicht geladen werden konnte, z.B. wegen CORS-Beschränkungen des
+ * Bild-Hosts).
+ */
+function collectImages(rootEl) {
+  var srcs = Array.from(rootEl.querySelectorAll('img'))
+    .map(function(img) { return img.getAttribute('src'); })
+    .filter(function(src, i, arr) { return src && arr.indexOf(src) === i; });
+  return Promise.all(srcs.map(function(src) {
+    return loadImageAsset(src).then(function(asset) { return [src, asset]; });
+  })).then(function(pairs) {
+    var map = {};
+    pairs.forEach(function(p) { map[p[0]] = p[1]; });
+    return map;
+  });
+}
+
+function pdfImageNode(imgEl, imageMap) {
+  var src = imgEl.getAttribute('src');
+  var alt = stripEmoji(imgEl.getAttribute('alt') || '');
+  var asset = imageMap ? imageMap[src] : null;
+  if (asset) {
+    // Natürliche Größe (96px/Zoll → pt), aber nie größer als der Textbereich
+    // bzw. eine vernünftige Seitenhöhe – kleine Bilder werden nicht hochskaliert.
+    var wPt = asset.width * 0.75, hPt = asset.height * 0.75;
+    var maxW = pmm(160), maxH = pmm(220);
+    var scale = Math.min(1, maxW / wPt, maxH / hPt);
+    return { image: asset.dataUrl, width: wPt * scale, height: hPt * scale, margin: [0, pmm(2), 0, pmm(4)] };
+  }
+  return { text: '[Bild konnte nicht geladen werden' + (alt ? ': ' + alt : '') + ']',
+           italics: true, color: '#888888', fontSize: 9.5, margin: [0, pmm(2), 0, pmm(2)] };
+}
+
+/**
+ * Zerlegt ein Element mit gemischtem Inhalt (Text + eingebettete <img>, z.B.
+ * "T-Shirtfarbe Kelly Green [Bild]" in einem Listenpunkt) in eine geordnete
+ * Abfolge von Text- und Bild-Blöcken. pdfmake kann Bilder nicht mitten in
+ * einer Textzeile darstellen; Bilder werden daher als eigener Block direkt
+ * nach dem vorangehenden Textabschnitt eingefügt.
+ */
+function mixedContentStack(el, imageMap, fontSize, lineHeight) {
+  var stack = [];
+  var currentRun = [];
+  function flushText() {
+    if (currentRun.length) {
+      stack.push({ text: currentRun, fontSize: fontSize, lineHeight: lineHeight, margin: [0, 0, 0, pmm(1)] });
+      currentRun = [];
+    }
+  }
+  Array.from(el.childNodes).forEach(function(node) {
+    if (node.nodeType === 3) {
+      var s = stripEmoji(node.textContent);
+      if (s) currentRun.push(s);
+    } else if (node.nodeType === 1) {
+      var tag = node.tagName.toLowerCase();
+      if (tag === 'img') {
+        flushText();
+        stack.push(pdfImageNode(node, imageMap));
+      } else if (tag === 'strong' || tag === 'b') {
+        currentRun.push({ text: inlineNodes(node), bold: true });
+      } else if (tag === 'em' || tag === 'i') {
+        currentRun.push({ text: inlineNodes(node), italics: true });
+      } else if (tag === 'a') {
+        currentRun.push({ text: inlineNodes(node), link: node.getAttribute('href') || '' });
+      } else if (tag === 'br') {
+        currentRun.push('\n');
+      } else {
+        currentRun.push(inlineNodes(node));
+      }
+    }
+  });
+  flushText();
+  return stack;
+}
+
+/**
+ * Verhindert, dass eine Seite direkt nach einer TOP-Überschrift endet
+ * (verwaiste Überschrift): Überschrift und der jeweils folgende Block werden
+ * zu einer untrennbaren Einheit zusammengefasst. Bei potenziell langen
+ * Blöcken (Listen, Tabellen – als "_bulky" markiert) wird nicht
+ * zusammengefasst, um keine übergroßen, nicht umbrechbaren Blöcke zu
+ * erzeugen.
+ */
+function keepHeadingsWithNext(nodes) {
+  var result = [];
+  for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+    if (node._heading) {
+      delete node._heading;
+      var next = nodes[i + 1];
+      if (next && !next._bulky) {
+        delete next._bulky;
+        result.push({ stack: [node, next], unbreakable: true });
+        i++;
+        continue;
+      }
+    }
+    delete node._bulky;
+    result.push(node);
+  }
+  return result;
+}
+
+function pdfBlockNodes(container, ctx, imageMap) {
+  var out = [];
+  Array.from(container.children).forEach(function(el) {
+    var tag = el.tagName.toLowerCase();
+    if (tag === 'h3') {
+      out.push({ text: stripEmoji(el.textContent.trim()), id: el.id || undefined, fontSize: 12, bold: true,
+                 color: ctx.blue, margin: [0, pmm(5), 0, pmm(2)], _heading: true });
+    } else if (tag === 'h4') {
+      out.push({ text: stripEmoji(el.textContent.trim()), id: el.id || undefined, fontSize: 10, bold: true,
+                 color: ctx.navy, margin: [0, pmm(3), 0, pmm(1)], _heading: true });
+    } else if (tag === 'p') {
+      if (!el.querySelector('img')) {
+        var t = el.textContent.trim();
+        if (!t) return;
+        out.push({ text: inlineNodes(el), fontSize: 10.5, lineHeight: 1.3, margin: [0, 0, 0, pmm(2)] });
+        return;
+      }
+      var pParts = mixedContentStack(el, imageMap, 10.5, 1.3);
+      pParts.forEach(function(part) { out.push(part); });
+    } else if (tag === 'blockquote') {
+      out.push(pdfBlockquoteNode(el));
+    } else if (tag === 'pre') {
+      out.push(pdfCodeBoxNode(el, ctx));
+    } else if (tag === 'ul' || tag === 'ol') {
+      var key = tag === 'ul' ? 'ul' : 'ol';
+      var items = Array.from(el.children).map(function(li) {
+        if (!li.querySelector('img')) return { text: inlineNodes(li), fontSize: 10.5, lineHeight: 1.3 };
+        return { stack: mixedContentStack(li, imageMap, 10.5, 1.3) };
+      });
+      var node = {}; node[key] = items;
+      node.margin = [pmm(5), 0, 0, pmm(2)];
+      node._bulky = true;
+      out.push(node);
+    } else if (tag === 'table') {
+      var tnode = pdfHtmlTableNode(el, ctx);
+      tnode._bulky = true;
+      out.push(tnode);
+    } else if (tag === 'img') {
+      out.push(pdfImageNode(el, imageMap));
+    }
+  });
+  return keepHeadingsWithNext(out);
+}
+
+function pdfMetaRowsFor(meta) {
+  var rows = [];
+  if (meta.gremium) rows.push(['Gremium', meta.gremium]);
+  if (meta.agname) rows.push(['AG-Name', meta.agname]);
+  if (meta.gremiumname) rows.push(['Gremium', meta.gremiumname]);
+  if (meta.ausschuss) rows.push(['Ausschuss', meta.ausschuss]);
+  if (meta.wahlperiode) rows.push(['Wahlperiode', meta.wahlperiode]);
+  rows.push(['Sitzungsnummer', meta.sitzung]);
+  rows.push(['Datum', meta.date]);
+  rows.push(['Ort', meta.ort]);
+  rows.push(['Sitzungsleitung', meta.sitzungsleitung]);
+  rows.push(['Protokollführung', meta.protokollfuehrung]);
+  if (meta.beginn || meta.ende) rows.push(['Beginn und Ende', (meta.beginn || '') + ' – ' + (meta.ende || '')]);
+  return rows;
+}
+
+var LOGO_ASPECT = 120.94667 / 474.97333;
+var ADDRESS_GAP = pmm(10);
+
+function pdfHeaderHeightFor(meta) {
+  var logoH = pmm(40) * LOGO_ASPECT;
+  var addressLineH = 7 * 1.7; // 7pt Schrift × 1.7 Zeilenhöhe, bereits in pt (wie pmm()-Werte)
+  var leftH = pmm(14) + logoH + ADDRESS_GAP + ADDRESS_LINES.length * addressLineH;
+  var rightH = pmm(14) + pmm(17) + pdfMetaRowsFor(meta).length * pmm(7.4);
+  return Math.max(leftH, rightH) + pmm(8);
+}
+
+/** Zweispaltiges Deckblatt-Kopfelement (Navy-Logospalte + Titel/Metadaten). */
+function pdfCoverHeaderTable(meta, ctx, logoSvg, titleText) {
+  var rows = pdfMetaRowsFor(meta);
+  var metaTableBody = rows.map(function(r) {
+    return [
+      { text: r[0] + ':', bold: true, color: ctx.navy, fontSize: 9, margin: [0, 3, 0, 3] },
+      { text: stripEmoji(String(r[1] || '')), fontSize: 9.5, margin: [0, 3, 0, 3] }
+    ];
+  });
+
+  var addressStack = ADDRESS_LINES.map(function(line) {
+    return { text: line || ' ', color: '#ffffff', fontSize: 7, lineHeight: 1.7 };
+  });
+
+  // Fällt das Nachladen von logo.svg weg (siehe loadLogoSvg), wird stattdessen
+  // ein schlichter Schriftzug angezeigt, statt die PDF-Erzeugung abzubrechen.
+  var logoNode = logoSvg
+    ? { svg: logoSvg, width: pmm(40), margin: [0, 0, 0, 0] }
+    : { text: 'FSMB · RWTH Aachen', color: '#ffffff', bold: true, fontSize: 11, margin: [0, pmm(3), 0, pmm(3)] };
+
+  var leftCell = {
+    fillColor: ctx.navy,
+    stack: [
+      logoNode,
+      { stack: addressStack, margin: [0, ADDRESS_GAP, 0, 0] }
+    ],
+    margin: [pmm(6), pmm(7), pmm(6), pmm(7)]
+  };
+
+  var rightCell = {
+    stack: [
+      { text: titleText || 'Protokoll', fontSize: 22, bold: true, color: ctx.navy, margin: [0, 0, 0, pmm(1)] },
+      { canvas: [{ type: 'line', x1: 0, y1: 0, x2: pmm(148), y2: 0, lineWidth: 1.2, lineColor: ctx.rwth }], margin: [0, 0, 0, pmm(4)] },
+      { table: { widths: [pmm(44), '*'], body: metaTableBody },
+        layout: {
+          hLineWidth: function(i, node) { return (i === 0 || i === node.table.body.length) ? 0 : 0.5; },
+          vLineWidth: function() { return 0; },
+          hLineColor: function() { return '#EBEBEB'; },
+          paddingLeft: function() { return 0; }, paddingRight: function() { return 0; }
+        }
+      }
+    ],
+    margin: [pmm(10), pmm(7), pmm(10), pmm(7)]
+  };
+
+  return {
+    table: { widths: [pmm(52), pmm(158)], body: [[leftCell, rightCell]] },
+    layout: { hLineWidth: function() { return 0; }, vLineWidth: function() { return 0; }, paddingLeft: function() { return 0; }, paddingRight: function() { return 0; }, paddingTop: function() { return 0; }, paddingBottom: function() { return 0; } }
+  };
+}
+
+function pdfNoticeBox(text, ctx) {
+  return {
+    table: { widths: ['*'], body: [[
+      { text: text, fillColor: ctx.bluel, fontSize: 8.5, lineHeight: 1.2, margin: [pmm(4), pmm(3.5), pmm(4), pmm(2.5)] }
+    ]] },
+    layout: {
+      hLineWidth: function() { return 0; },
+      vLineWidth: function(i) { return i === 0 ? 3 : 0; },
+      vLineColor: function() { return ctx.blue; },
+      paddingLeft: function() { return 0; }, paddingRight: function() { return 0; },
+      paddingTop: function() { return 0; }, paddingBottom: function() { return 0; }
+    }
+  };
+}
+
+function pdfSectionHeading(text, ctx, opts) {
+  opts = opts || {};
+  var heading = { text: text, fontSize: 13, bold: true, color: ctx.navy, margin: [0, 0, 0, pmm(2)] };
+  if (opts.pageBreak) heading.pageBreak = 'before';
+  return [heading, { canvas: [{ type: 'line', x1: 0, y1: 0, x2: pmm(180), y2: 0, lineWidth: 1.2, lineColor: ctx.rwth }], margin: [0, 0, 0, pmm(3)] }];
+}
+
+/** Baut die vollständige pdfmake-Dokumentdefinition für das Sitzungsprotokoll. */
+function buildProtocolDocDefinition(opts) {
+  var meta = opts.meta, ctx = opts.modeColors, tocItems = opts.tocItems;
+  var attendanceEl = opts.attendanceEl, protocolEl = opts.protocolEl;
+  var beschluesse = opts.beschluesse, hasMoney = opts.hasMoney, logoSvg = opts.logoSvg;
+  var imageMap = opts.imageMap || {};
+
+  var content = [];
+  var headerH = pdfHeaderHeightFor(meta);
+
+  var headerTable = pdfCoverHeaderTable(meta, ctx, logoSvg, 'Protokoll');
+  headerTable.absolutePosition = { x: 0, y: 0 };
+  content.push(headerTable);
+  content.push({
+    canvas: [{ type: 'rect', x: 0, y: 0, w: pmm(210), h: pmm(1), color: ctx.rwth }],
+    absolutePosition: { x: 0, y: headerH }
+  });
+  content.push({
+    columns: [
+      { width: pmm(93), stack: [pdfNoticeBox('Beschlüsse werden in der Reihenfolge (ja/nein/enthalten) bzw. (ja/nein/enthalten/ungültig) angegeben. Ein „M" stellt die nötige Mehrheit dar.', ctx)] },
+      { width: pmm(93), stack: [pdfNoticeBox('Inhalte werden gemäß der Reihenfolge der Tagesordnungspunkte (TOP) wiedergegeben.', ctx)] }
+    ],
+    columnGap: pmm(4),
+    absolutePosition: { x: pmm(10), y: headerH + pmm(5) }
+  });
+  content.push({ text: '', pageBreak: 'after' });
+
+  var tocNodes = pdfSectionHeading('Tagesordnung', ctx);
+  tocItems.forEach(function(item) {
+    tocNodes.push({
+      text: stripEmoji(item.text), fontSize: item.level === 0 ? 11 : 10.5, color: item.level === 0 ? ctx.navy : ctx.blue,
+      linkToDestination: item.anchor, margin: [item.level === 0 ? 0 : pmm(15), item.level === 0 ? pmm(2.5) : pmm(1.5), 0, 0]
+    });
+  });
+  content = content.concat(tocNodes);
+
+  content = content.concat(pdfSectionHeading('Anwesenheitsliste', ctx, { pageBreak: true }));
+  content.push(pdfHtmlTableNode(attendanceEl, ctx));
+
+  content = content.concat(pdfSectionHeading('Protokoll', ctx, { pageBreak: true }));
+  content = content.concat(pdfBlockNodes(protocolEl, ctx, imageMap));
+
+  if (beschluesse.length > 0) {
+    content = content.concat(pdfSectionHeading('Beschlusszusammenfassung', ctx, { pageBreak: true }));
+    var bsBody = [[
+      { text: 'Nr.', color: '#fff', bold: true, fillColor: ctx.navy, fontSize: 9, margin: [4, 4, 4, 4] },
+      { text: 'Abschnitt', color: '#fff', bold: true, fillColor: ctx.navy, fontSize: 9, margin: [4, 4, 4, 4] },
+      { text: 'Beschluss', color: '#fff', bold: true, fillColor: ctx.navy, fontSize: 9, margin: [4, 4, 4, 4] }
+    ]];
+    beschluesse.forEach(function(b, i) {
+      bsBody.push([
+        { text: 'B-' + (i + 1), fontSize: 9.5, margin: [4, 4, 4, 4] },
+        { text: stripEmoji(b.heading), fontSize: 9.5, margin: [4, 4, 4, 4] },
+        { text: stripEmoji(b.text), fontSize: 9, margin: [4, 4, 4, 4] }
+      ]);
+    });
+    content.push({
+      table: { headerRows: 1, widths: [pmm(12), pmm(50), '*'], body: bsBody },
+      layout: {
+        hLineWidth: function(i) { return (i <= 1) ? 0 : 0.5; }, vLineWidth: function() { return 0; },
+        hLineColor: function() { return '#DDDDD8'; },
+        fillColor: function(rowIndex) { return rowIndex > 0 && rowIndex % 2 === 0 ? '#F5F7FA' : null; }
+      },
+      margin: [0, 0, 0, pmm(2)]
+    });
+
+    if (hasMoney) {
+      var ausgaben = beschluesse.filter(function(b) { return b.summe !== null && b.summe !== undefined && !isNaN(b.summe) && b.summe > 0; });
+      if (ausgaben.length > 0) {
+        var palette = ctx.chartPalette;
+        var svg = buildPieChartSvg(ausgaben.map(function(a) { return a.summe; }), palette);
+        var total = ausgaben.reduce(function(s, a) { return s + a.summe; }, 0);
+        var legend = ausgaben.map(function(a, i) {
+          var pct = ((a.summe / total) * 100).toFixed(1);
+          var amt = a.summe.toFixed(2).replace('.', ',');
+          return { text: [{ text: '• ', color: palette[i % palette.length] }, stripEmoji(a.heading) + ' – ' + amt + ' € (' + pct + ' %)'], fontSize: 9, margin: [0, 0, 0, pmm(1.8)] };
+        });
+        content.push({ text: 'Beschlossene Ausgaben', fontSize: 13, bold: true, color: ctx.navy, margin: [0, pmm(4), 0, pmm(2)] });
+        content.push({ columns: [ { svg: svg, width: pmm(42) }, { stack: legend, margin: [pmm(10), pmm(2), 0, 0] } ] });
+        content.push({ text: [ 'Gesamtausgaben dieser Sitzung: ', { text: total.toFixed(2).replace('.', ',') + ' €', bold: true } ], fontSize: 9, color: '#555555', margin: [0, pmm(4), 0, 0] });
+      }
+    }
+  }
+
+  content = content.concat(pdfSectionHeading('Abkürzungsverzeichnis', ctx, { pageBreak: true }));
+  var abbrBody = [[
+    { text: 'Abkürzung', color: '#fff', bold: true, fillColor: ctx.navy, fontSize: 9, margin: [4, 4, 4, 4] },
+    { text: 'Ausgeschrieben', color: '#fff', bold: true, fillColor: ctx.navy, fontSize: 9, margin: [4, 4, 4, 4] }
+  ]];
+  ABBR.forEach(function(pair) {
+    abbrBody.push([
+      { text: pair[0], bold: true, color: ctx.navy, fontSize: 9.5, margin: [4, 4, 4, 4] },
+      { text: pair[1], fontSize: 9.5, margin: [4, 4, 4, 4] }
+    ]);
+  });
+  content.push({
+    table: { headerRows: 1, widths: [pmm(38), '*'], body: abbrBody },
+    layout: {
+      hLineWidth: function(i) { return (i <= 1) ? 0 : 0.5; }, vLineWidth: function() { return 0; },
+      hLineColor: function() { return '#DDDDD8'; },
+      fillColor: function(rowIndex) { return rowIndex > 0 && rowIndex % 2 === 0 ? '#F5F7FA' : null; }
+    }
+  });
+
+  content = content.concat(pdfSectionHeading('Bestätigung', ctx, { pageBreak: true }));
+  content.push({ text: 'Dieses Protokoll wurde in der vorliegenden Fassung am ______________________ durch das betreffende Gremium beschlossen.', fontSize: 11, lineHeight: 1.6, margin: [0, 0, 0, pmm(16)] });
+  content.push({
+    columns: [
+      { stack: [
+          { canvas: [{ type: 'line', x1: 0, y1: 0, x2: pmm(75), y2: 0, lineWidth: 1, lineColor: '#333333' }], margin: [0, 0, 0, pmm(3)] },
+          { text: 'Sitzungsleitung', fontSize: 9, color: '#555555' },
+          { text: meta.sitzungsleitung || '', fontSize: 9.5, bold: true, color: ctx.navy, margin: [0, pmm(1), 0, 0] }
+        ] },
+      { stack: [
+          { canvas: [{ type: 'line', x1: 0, y1: 0, x2: pmm(75), y2: 0, lineWidth: 1, lineColor: '#333333' }], margin: [0, 0, 0, pmm(3)] },
+          { text: 'Protokollführung', fontSize: 9, color: '#555555' },
+          { text: meta.protokollfuehrung || '', fontSize: 9.5, bold: true, color: ctx.navy, margin: [0, pmm(1), 0, 0] }
+        ] }
+    ],
+    columnGap: pmm(20)
+  });
+
+  return {
+    pageSize: 'A4',
+    pageMargins: [pmm(15), pmm(18), pmm(15), pmm(16)],
+    defaultStyle: { font: 'Arimo', fontSize: 10.5, lineHeight: 1.3 },
+    header: function(currentPage) {
+      if (currentPage === 1) return null;
+      return {
+        columns: [
+          { text: ctx.name + ' – Maschinenbau · RWTH Aachen', fontSize: 10, color: ctx.navy },
+          { text: 'Sitzung ' + (meta.sitzung || '') + ' · ' + (meta.date || ''), fontSize: 10, color: '#6b6b6b', alignment: 'right' }
+        ],
+        margin: [pmm(15), pmm(7), pmm(15), 0]
+      };
+    },
+    footer: function(currentPage, pageCount) {
+      if (currentPage === 1) return null;
+      return {
+        columns: [
+          { text: ctx.name + ' · ' + ctx.label + ' · RWTH Aachen', fontSize: 10, color: '#888888' },
+          { text: 'Seite ' + currentPage + ' von ' + pageCount, fontSize: 10, color: ctx.navy, alignment: 'right' }
+        ],
+        margin: [pmm(15), 0, pmm(15), pmm(7)]
+      };
+    },
+    content: content
+  };
+}
+
+/**
+ * Baut die (schlanke, einseitige) pdfmake-Dokumentdefinition für die
+ * Tagesordnung, die vor der Sitzung verschickt werden kann.
+ * @param {Array<string>} tocLines - Zeilen wie von buildAgendaData() geliefert;
+ *   mit vier Leerzeichen eingerückte Zeilen gelten als Unterpunkt.
+ */
+function buildAgendaDocDefinition(meta, tocLines, ctx, logoSvg) {
+  var headerH = pdfHeaderHeightFor(meta);
+  var content = [];
+
+  var headerTable = pdfCoverHeaderTable(meta, ctx, logoSvg, 'Tagesordnung');
+  headerTable.absolutePosition = { x: 0, y: 0 };
+  content.push(headerTable);
+  content.push({
+    canvas: [{ type: 'rect', x: 0, y: 0, w: pmm(210), h: pmm(1), color: ctx.rwth }],
+    absolutePosition: { x: 0, y: headerH }
+  });
+
+  var agendaNodes = [];
+  tocLines.forEach(function(line) {
+    var isSub = /^ {4}/.test(line);
+    agendaNodes.push({
+      text: stripEmoji(line.trim()), fontSize: isSub ? 10.5 : 11, color: isSub ? ctx.blue : ctx.navy,
+      margin: [isSub ? pmm(15) : 0, isSub ? pmm(1.5) : pmm(2.5), 0, 0]
+    });
+  });
+
+  content.push({
+    stack: agendaNodes,
+    absolutePosition: { x: pmm(10), y: headerH + pmm(8) }
+  });
+
+  return {
+    pageSize: 'A4',
+    pageMargins: [pmm(15), pmm(18), pmm(15), pmm(16)],
+    defaultStyle: { font: 'Arimo', fontSize: 10.5, lineHeight: 1.3 },
+    content: content
+  };
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PDF GENERIEREN
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Parst das YAML-Frontmatter einer Markdown-Datei in ein Objekt. */
+function parseMeta(md) {
+  var match = md.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return {};
+  var out = {};
+  match[1].split('\n').forEach(function(line) {
+    var idx = line.indexOf(':');
+    if (idx < 0) return;
+    out[line.slice(0, idx).trim()] = line.slice(idx + 1).trim().replace(/^"|"$/g, '');
+  });
+  return out;
+}
+
+/** Baut die Kontextfarben (inkl. Kuchendiagramm-Palette) für den aktuellen Modus. */
+function pdfModeColors() {
+  var mc = MODES[currentMode];
+  return {
+    navy: mc.navy, blue: mc.blue, rwth: mc.rwth, bluel: mc.bluel,
+    name: mc.name, label: mc.label,
+    chartPalette: MODE_CHART_PALETTES[currentMode] || MODE_CHART_PALETTES.fsv
+  };
+}
+
+// PDF-Button: erzeugt das PDF direkt im Browser und lädt es herunter
+document.getElementById('btn-pdf').addEventListener('click', function() {
+  if (!uploadedMd) return;
+
+  var btn = this;
+  var pw  = document.getElementById('pw');
+  var eb  = document.getElementById('err-box');
+  btn.disabled = true;
+  pw.classList.add('active');
+  eb.style.display = 'none';
+
+  setProgress(15, 'Metadaten werden gelesen...');
+  var meta    = parseMeta(uploadedMd);
+  var rawBody = uploadedMd.replace(/^---[\s\S]*?---\n/, '');
+
+  setProgress(35, 'Abschnitte werden verarbeitet...');
+  var attendanceMd  = extractSection(rawBody, 'Anwesenheitsliste');
+  var protocolMd    = extractSection(rawBody, 'Protokoll');
+
+  var tocItemsRaw      = buildTocFromProtocol(marked.parse(protocolMd || ''));
+  var tocItems         = tocItemsRaw.map(function(it) { return Object.assign({}, it, { anchor: slugify(it.text) }); });
+  var attendanceHtml   = cleanAttendanceXxx(marked.parse(attendanceMd  || ''));
+  var protocolHtmlRaw  = addHeadingIds(marked.parse(protocolMd || ''));
+  var beschluesse      = extractBeschluesse(protocolHtmlRaw);
+
+  var beginnMatch = (protocolMd || '').match(/@[Bb]eginn\(([^)]+)\)/);
+  var endeMatch   = (protocolMd || '').match(/@[Ee]nde\(([^)]+)\)/);
+  if (beginnMatch) meta.beginn = beginnMatch[1].trim();
+  if (endeMatch)   meta.ende   = endeMatch[1].trim();
+
+  var protocolHtml = removeAtSumme(protocolHtmlRaw);
+  var attendanceEl = document.createElement('div'); attendanceEl.innerHTML = attendanceHtml;
+  var protocolEl   = document.createElement('div'); protocolEl.innerHTML   = protocolHtml;
+
+  setProgress(45, 'Schriftdaten werden geladen...');
+  Promise.all([loadPdfFonts(), collectImages(protocolEl), loadLogoSvg()]).then(function(results) {
+    var imageMap = results[1];
+    setProgress(85, 'PDF wird erzeugt...');
+    var docDefinition = buildProtocolDocDefinition({
+      meta: meta, modeColors: pdfModeColors(), tocItems: tocItems,
+      attendanceEl: attendanceEl.querySelector('table') || attendanceEl,
+      protocolEl: protocolEl, beschluesse: beschluesse,
+      hasMoney: MODES[currentMode].hasMoney, logoSvg: results[2],
+      imageMap: imageMap
+    });
+    var modeShort = currentMode === 'gremien' ? 'GREMIEN' : currentMode.toUpperCase();
+    var filename = 'Protokoll-' + modeShort + shortWp(meta.wahlperiode) + '-Sitzung-' + String(meta.sitzung || 'X').padStart(2, '0') + '.pdf';
+    pdfMake.createPdf(docDefinition).download(filename);
+
+    setProgress(100, 'Fertig!');
+    setTimeout(function() { pw.classList.remove('active'); setProgress(0, ''); btn.disabled = false; }, 900);
+  }).catch(function(err) {
+    pw.classList.remove('active'); setProgress(0, ''); btn.disabled = false;
+    eb.textContent = 'Fehler bei der PDF-Erzeugung: ' + err.message;
+    eb.style.display = 'block';
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MITGLIEDERVERWALTUNG & ANWESENHEITSLISTE
+// Mitglieder werden im localStorage gespeichert und bleiben über Sessions erhalten.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Konfiguration: Sync-Status (Ersteinrichtungs-Hinweis + Zeitstempel) ──────
+
+var CONFIG_META_KEY = 'fsmb_config_meta_v1';
+
+function getConfigMeta() {
+  try { return JSON.parse(localStorage.getItem(CONFIG_META_KEY) || '{}'); } catch(e) { return {}; }
+}
+
+function touchConfigMeta(kind) {
+  var meta = getConfigMeta();
+  meta[kind] = new Date().toISOString();
+  try { localStorage.setItem(CONFIG_META_KEY, JSON.stringify(meta)); } catch(e) {}
+  renderConfigSyncStatus();
+}
+
+function formatDeDateTime(iso) {
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+/** Aktualisiert den Ersteinrichtungs-Hinweis und die Zeitstempelanzeige im Konfig-Tab. */
+function renderConfigSyncStatus() {
+  var banner = document.getElementById('cfg-first-time-banner');
+  var statusEl = document.getElementById('cfg-sync-status');
+  if (!banner || !statusEl) return;
+
+  var hasStoredConfig = localStorage.getItem(CONFIG_KEY) !== null;
+  banner.style.display = hasStoredConfig ? 'none' : 'block';
+
+  var meta = getConfigMeta();
+  var parts = [];
+  if (meta.import) parts.push('Zuletzt importiert: ' + formatDeDateTime(meta.import));
+  if (meta.export) parts.push('zuletzt exportiert: ' + formatDeDateTime(meta.export));
+  statusEl.textContent = parts.length ? parts.join(' · ') : 'Noch nicht importiert oder exportiert.';
+}
+
+// ── Konfiguration: Event-Listener ────────────────────────────────────────────
+
+document.getElementById('cfg-save').addEventListener('click', function() {
+  applyAndSaveConfig();
+  renderConfigSyncStatus();
+  var st = document.getElementById('cfg-status');
+  st.textContent = '✓ Gespeichert';
+  st.style.display = 'block';
+  setTimeout(function() { st.style.display = 'none'; }, 2000);
+});
+
+document.getElementById('cfg-export').addEventListener('click', function() {
+  var cfg = getConfig();
+  var blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url; a.download = 'FSMB-Konfiguration.json';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+  touchConfigMeta('export');
+});
+
+/** Liest eine importierte Konfigurations-JSON-Datei ein und wendet sie an. */
+function importConfigFile(file) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var cfg = JSON.parse(e.target.result);
+      saveConfig(cfg);
+      renderConfigPage();
+      TOPS = getTopsForMode(currentMode);
+      sel = {}; openState = {};
+      TOPS.forEach(function(g) {
+        openState[g.id] = !!g.open;
+        g.items.forEach(function(it) { sel[it.id] = it.on; });
+      });
+      renderTops();
+      initRaeumeDropdown();
+      initAusschussDropdown();
+      touchConfigMeta('import');
+      var st = document.getElementById('cfg-status');
+      st.textContent = '✓ Importiert';
+      st.style.display = 'block';
+      setTimeout(function() { st.style.display = 'none'; }, 2000);
+    } catch(err) {
+      alert('Fehler beim Lesen der JSON-Datei: ' + err.message);
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+document.getElementById('cfg-import-file').addEventListener('change', function() {
+  if (this.files[0]) importConfigFile(this.files[0]);
+  this.value = '';
+});
+
+// Import per Klick oder Drag & Drop auf die Upload-Zone
+var cfgUploadZone = document.getElementById('cfg-upload-zone');
+cfgUploadZone.addEventListener('click', function() { document.getElementById('cfg-import-file').click(); });
+cfgUploadZone.addEventListener('dragover', function(e) { e.preventDefault(); cfgUploadZone.classList.add('drag'); });
+cfgUploadZone.addEventListener('dragleave', function()  { cfgUploadZone.classList.remove('drag'); });
+cfgUploadZone.addEventListener('drop', function(e) {
+  e.preventDefault();
+  cfgUploadZone.classList.remove('drag');
+  if (e.dataTransfer.files[0]) importConfigFile(e.dataTransfer.files[0]);
+});
+
+// Logo-Import per Klick oder Drag & Drop (siehe loadLogoSvg/importLogoFile)
+document.getElementById('logo-import-file').addEventListener('change', function() {
+  if (this.files[0]) importLogoFile(this.files[0]);
+  this.value = '';
+});
+var logoUploadZone = document.getElementById('logo-upload-zone');
+logoUploadZone.addEventListener('click', function() { document.getElementById('logo-import-file').click(); });
+logoUploadZone.addEventListener('dragover', function(e) { e.preventDefault(); logoUploadZone.classList.add('drag'); });
+logoUploadZone.addEventListener('dragleave', function()  { logoUploadZone.classList.remove('drag'); });
+logoUploadZone.addEventListener('drop', function(e) {
+  e.preventDefault();
+  logoUploadZone.classList.remove('drag');
+  if (e.dataTransfer.files[0]) importLogoFile(e.dataTransfer.files[0]);
+});
+
+// ── Anwesenheitsliste → Markdown ──────────────────────────────────────────────
+
+/**
+ * Baut den Markdown-Text für die Anwesenheitstabelle.
+ * Gibt Zeilen zurück, die jeweils einen Eintrag pro Spalte enthalten.
+ */
+function buildAttendanceMd() {
+  var EXTRA = 5;
+
+  /** Füllt einen String mit Leerzeichen auf die Zielbreite auf. */
+  function pad(str, width) {
+    return str + ' '.repeat(Math.max(0, width - str.length));
+  }
+
+  /**
+   * Baut eine spaltenweise ausgerichtete Markdown-Tabelle.
+   * Alle Zellen einer Spalte werden auf gleiche Breite gebracht,
+   * sodass der Rohtext im Editor uebersichtlich bleibt.
+   */
+  function buildAlignedTable(labels, colData) {
+    var maxLen = colData.reduce(function(m, c) { return Math.max(m, c.length); }, 0);
+    var totalRows = maxLen + EXTRA;
+
+    // Alle Zellen vorberechnen (echte Eintraege + XXX-Platzhalter)
+    var cells = [];
+    for (var i = 0; i < totalRows; i++) {
+      cells.push(colData.map(function(col) { return i < col.length ? col[i] : 'XXX'; }));
+    }
+
+    // Spaltenbreite = max(Header-Laenge, laengster Inhalt in der Spalte)
+    var widths = labels.map(function(lbl, ci) {
+      return cells.reduce(function(max, row) {
+        return Math.max(max, row[ci].length);
+      }, lbl.length);
+    });
+
+    var header = '| ' + labels.map(function(l, i) { return pad(l, widths[i]); }).join(' | ') + ' |';
+    var sep    = '|' + widths.map(function(w) { return '-'.repeat(w + 2); }).join('|') + '|';
+    var body   = cells.map(function(row) {
+      return '| ' + row.map(function(cell, i) { return pad(cell, widths[i]); }).join(' | ') + ' |';
+    }).join('\n') + '\n';
+
+    return '## Anwesenheitsliste\n\n' + header + '\n' + sep + '\n' + body + '\n';
+  }
+
+  if (currentMode === 'ag') {
+    var col    = [];  // AG hat keine Mitgliedsliste aus der Config
+    var cells1 = col.concat(new Array(EXTRA).fill('XXX'));
+    var width  = cells1.reduce(function(m, c) { return Math.max(m, c.length); }, 'Anwesende'.length);
+    var header1 = '| ' + pad('Anwesende', width) + ' |';
+    var sep1    = '|-' + '-'.repeat(width) + '-|';
+    var body1   = cells1.map(function(c) { return '| ' + pad(c, width) + ' |'; }).join('\n') + '\n';
+    return '## Anwesenheitsliste\n\n' + header1 + '\n' + sep1 + '\n' + body1 + '\n';
+  }
+
+  // Mitgliederlisten aus der Konfiguration
+  var cfg   = getConfig();
+  var stimm = cfg.stimmberechtigte || [];
+  var rat   = cfg.ratsmitglieder   || [];
+
+  if (currentMode === 'gremien') {
+    return buildAlignedTable(
+      ['Gremiummitglieder', 'Sonstige Anwesende'],
+      [[], []]
+    );
+  }
+
+  if (currentMode === 'ausschuss') {
+    var ausschussSel  = document.getElementById('m-ausschuss');
+    var ausschussName = ausschussSel ? ausschussSel.value : '';
+    var gewaehlterAusschuss = (cfg.ausschuesse || []).find(function(a) { return a.name === ausschussName; });
+    return buildAlignedTable(
+      ['Gewählte Mitglieder', 'Weitere Anwesende'],
+      [gewaehlterAusschuss ? (gewaehlterAusschuss.mitglieder || []) : [], []]
+    );
+  }
+
+  // FSV: stimm | rat | weitere
+  // FaS: rat zuerst (Ratsmitglieder), dann stimm (FSV-Mitglieder) — Spalten getauscht
+  if (currentMode === 'fas') {
+    return buildAlignedTable(
+      ['Ratsmitglieder', 'FSV-Mitglieder', 'Weitere Anwesende'],
+      [rat, stimm, []]
+    );
+  }
+
+  return buildAlignedTable(
+    ['Stimmberechtigte', 'Ratsmitglieder (FSV-Mitglieder ausgenommen)', 'Weitere Anwesende'],
+    [stimm, rat, []]
+  );
+}
+
+/** Befüllt das Wahlperiode-Dropdown mit 11 Einträgen (10 rückwirkend + nächste). */
+function initWahlperiodeDropdown() {
+  var sel = document.getElementById('m-wahlperiode');
+  if (!sel) return;
+
+  var now       = new Date();
+  var year      = now.getFullYear();
+  var month     = now.getMonth() + 1; // 1-12
+
+  // Startjahr der aktuellen Wahlperiode: ab Juli des laufenden Jahres
+  var startYear = month >= 7 ? year : year - 1;
+
+  // Nächste Periode + 10 rückwirkende = 12 Einträge, aktuell als Standard
+  var periods = [];
+  for (var i = 1; i >= -10; i--) {
+    var s = startYear + i;
+    periods.push(s + '-' + (s + 1));
+  }
+
+  sel.innerHTML = '';
+  periods.forEach(function(p, idx) {
+    var opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = p;
+    if (idx === 1) opt.selected = true; // idx 1 = aktuelle Periode (idx 0 = nächste)
+    sel.appendChild(opt);
+  });
+}
+
+initWahlperiodeDropdown();
+
+/** Befüllt die Raum-Datalist mit den konfigurierten Räumen (Vorschläge, freie Eingabe bleibt möglich). */
+function initRaeumeDropdown() {
+  var sel = document.getElementById('m-ort-select');
+  if (!sel) return;
+  var raeume = getConfig().raeume || [];
+  var prev = sel.value;
+  sel.innerHTML = '';
+  var placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Raum wählen…';
+  sel.appendChild(placeholder);
+  raeume.forEach(function(r) {
+    var opt = document.createElement('option');
+    opt.value = r;
+    opt.textContent = r;
+    sel.appendChild(opt);
+  });
+  var customOpt = document.createElement('option');
+  customOpt.value = '__custom__';
+  customOpt.textContent = 'Anderer Raum (eintippen)…';
+  sel.appendChild(customOpt);
+  if (raeume.indexOf(prev) !== -1 || prev === '__custom__') sel.value = prev;
+  toggleOrtCustom();
+}
+
+/** Zeigt/versteckt das Freitext-Feld für einen nicht gelisteten Raum. */
+function toggleOrtCustom() {
+  var selEl    = document.getElementById('m-ort-select');
+  var customEl = document.getElementById('m-ort-custom');
+  if (!selEl || !customEl) return;
+  var isCustom = selEl.value === '__custom__';
+  customEl.style.display = isCustom ? '' : 'none';
+  if (isCustom) customEl.focus();
+}
+
+/** Liefert den aktuell gewählten Raum bzw. den frei eingetippten Ort. */
+function getOrtValue() {
+  var selEl    = document.getElementById('m-ort-select');
+  var customEl = document.getElementById('m-ort-custom');
+  if (selEl && selEl.value === '__custom__') {
+    return customEl ? customEl.value.trim() : '';
+  }
+  return selEl ? selEl.value : '';
+}
+
+/** Befüllt das Ausschuss-Dropdown mit den konfigurierten Ausschüssen. */
+function initAusschussDropdown() {
+  var sel = document.getElementById('m-ausschuss');
+  if (!sel) return;
+  var ausschuesse = getConfig().ausschuesse || [];
+  var prev = sel.value;
+  sel.innerHTML = '';
+  ausschuesse.forEach(function(a) {
+    var opt = document.createElement('option');
+    opt.value = a.name;
+    opt.textContent = a.name;
+    sel.appendChild(opt);
+  });
+  if (ausschuesse.some(function(a) { return a.name === prev; })) sel.value = prev;
+}
+
+initRaeumeDropdown();
+initAusschussDropdown();
+
+// Datum-Feld automatisch mit heutigem Datum befüllen (deutsches Format)
+var dateField = document.getElementById('m-date');
+if (dateField && !dateField.value) {
+  var today = new Date();
+  var dd = String(today.getDate()).padStart(2, '0');
+  var mm = String(today.getMonth() + 1).padStart(2, '0');
+  var yyyy = today.getFullYear();
+  dateField.value = dd + '.' + mm + '.' + yyyy;
+}
+
+renderTops();
+
+</script>
+</body>
+</html>
