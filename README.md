@@ -24,7 +24,8 @@ Bildabruf) wird eine Internetverbindung benötigt.
   Tagesordnung: FSV, FaS, AG-Sitzung, Gremien-Vorbesprechung, Ausschusssitzung
 - **Markdown-Vorlage generieren**: Sitzungsmetadaten (Datum, Ort, Sitzungsleitung
   etc.) eintragen, gewünschte Tagesordnungspunkte auswählen, Vorlage
-  herunterladen oder in die Zwischenablage kopieren
+  direkt in einer neuen HedgeDoc-Notiz öffnen, herunterladen oder in die
+  Zwischenablage kopieren
 - **Tagesordnung vorab verschicken**: kompaktes PDF mit Sitzungsmetadaten und
   der aktuell gewählten Tagesordnung – zum Rundschicken vor der Sitzung, ganz
   ohne HedgeDoc-Umweg
@@ -44,10 +45,15 @@ Bildabruf) wird eine Internetverbindung benötigt.
 1. **Generator**-Tab öffnen, Sitzungsmodus wählen und Metadaten ausfüllen
 2. Benötigte Tagesordnungspunkte an-/abwählen
 3. Optional: Tagesordnung als PDF herunterladen und vor der Sitzung verschicken
-4. Markdown-Vorlage herunterladen (oder kopieren) und in HedgeDoc öffnen
-5. Protokoll während der Sitzung in HedgeDoc ausfüllen und als Markdown
-   exportieren
-6. Im Tab **Export & PDF** die exportierte `.md`-Datei hochladen
+4. **In HedgeDoc öffnen** klicken: Die Vorlage wird in die Zwischenablage
+   kopiert und eine neue Notiz auf [HedgeDoc](https://hedgedoc.fsmb.rwth-aachen.de)
+   geöffnet – dort mit Cmd/Strg + V einfügen (alternativ Vorlage
+   herunterladen bzw. kopieren). HedgeDoc ist außerdem jederzeit über den
+   Link in der Kopfleiste erreichbar
+5. Protokoll während der Sitzung in HedgeDoc ausfüllen
+6. Im Tab **Export & PDF** den Notiztext einfügen (in HedgeDoc im
+   Bearbeitungsmodus Cmd/Strg + A, Cmd/Strg + C) und übernehmen – oder wie
+   bisher die als Markdown exportierte `.md`-Datei hochladen
 7. Vorschau prüfen und auf „PDF herunterladen“ klicken – das fertige,
    formatierte Protokoll wird direkt als PDF-Datei heruntergeladen
 
@@ -109,6 +115,23 @@ nicht der Fall (z.B. bei der Standard-Konfiguration vieler HedgeDoc-Instanzen),
 erscheint im PDF ein Platzhaltertext statt des Bildes; die restliche
 PDF-Erzeugung bricht dadurch nicht ab. Abhilfe schafft nur ein entsprechend
 gesetzter CORS-Header auf dem Bild-Host selbst.
+
+## Tickboxen
+
+Listenpunkte können als Tickbox geschrieben werden (HedgeDoc-/GFM-Syntax).
+In Vorschau und PDF werden nur angekreuzte Einträge übernommen – als
+normaler Aufzählungspunkt ohne Kästchen; nicht angekreuzte Einträge
+(inkl. eingerückter Unterpunkte) entfallen komplett:
+
+```markdown
+Wer wird auf der Sitzung des Fakultätsrats anwesend sein?
+
+- [x] Janick
+- [ ] Emelie
+- [x] Mayara
+```
+
+ergibt im Protokoll nur „Janick" und „Mayara".
 
 ## Technisches
 

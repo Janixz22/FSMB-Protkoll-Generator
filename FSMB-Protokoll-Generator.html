@@ -63,6 +63,7 @@ header {
 }
 .tab:hover        { color: rgba(255,255,255,.85); }
 .tab.active       { color: #fff; border-bottom-color: #fff; }
+a.tab             { display: inline-flex; align-items: center; text-decoration: none; box-sizing: border-box; }
 
 /* ── Seitenstruktur ────────────────────────────────────────────────────────── */
 .page           { display: none; }
@@ -288,6 +289,22 @@ header {
   line-height: 1.6;
 }
 .file-status { font-size: 13px; font-weight: 600; margin-top: 10px; color: #1a5c1a; display: none; }
+.paste-label { font-size: 13px; color: var(--muted); margin: 1.25rem 0 6px; }
+#paste-input {
+  width: 100%;
+  min-height: 120px;
+  padding: 8px 11px;
+  font-size: 13px;
+  font-family: Menlo, Consolas, monospace;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fafaf8;
+  color: var(--text);
+  box-sizing: border-box;
+  resize: vertical;
+  margin-bottom: 10px;
+}
+#paste-input:focus { outline: none; border-color: var(--rwth); box-shadow: 0 0 0 3px rgba(0,84,159,.1); }
 .err-box {
   display: none;
   margin-top: 14px;
@@ -427,6 +444,7 @@ header {
   <nav class="tabs">
     <button class="tab active" onclick="showPage('generator', this)">Generator</button>
     <button class="tab"        onclick="showPage('export',    this)">Export &amp; PDF</button>
+    <a class="tab" href="https://hedgedoc.fsmb.rwth-aachen.de" target="_blank" rel="noopener" title="HedgeDoc der FSMB in neuem Tab öffnen">HedgeDoc &#8599;</a>
     <button class="tab tab-icon" onclick="showPage('config', this); renderConfigPage()" title="Konfiguration">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="2.2"
@@ -501,12 +519,15 @@ header {
     <div class="card">
       <div class="card-title">Vorlage herunterladen</div>
       <div class="btn-row">
-        <button class="btn btn-dl" id="btn-dl-md">&#8595; Markdown-Vorlage herunterladen</button>
+        <button class="btn btn-dl" id="btn-open-hedgedoc" title="Vorlage kopieren und neue HedgeDoc-Notiz öffnen">&#8599; In HedgeDoc &ouml;ffnen</button>
+        <button class="btn btn-sec" id="btn-dl-md">&#8595; Markdown-Vorlage herunterladen</button>
         <button class="btn btn-sec" id="btn-copy-md" title="Markdown in Zwischenablage kopieren">&#128203; Kopieren</button>
       </div>
       <div class="notice">
-        In HedgeDoc &ouml;ffnen, Protokoll ausf&uuml;llen, als Markdown exportieren
-        und dann im Tab <strong>Export &amp; PDF</strong> hochladen.
+        <strong>In HedgeDoc &ouml;ffnen</strong> kopiert die Vorlage und &ouml;ffnet eine neue
+        HedgeDoc-Notiz &ndash; dort mit <strong>Cmd/Strg + V</strong> einf&uuml;gen. Nach der Sitzung
+        den Notiztext im Tab <strong>Export &amp; PDF</strong> einf&uuml;gen (oder die
+        exportierte .md-Datei hochladen).
       </div>
     </div>
 
@@ -529,12 +550,20 @@ header {
   <div class="container" style="padding-top: 1.5rem;">
 
     <div class="card">
-      <div class="card-title">Protokoll hochladen</div>
+      <div class="card-title">Protokoll laden</div>
       <div class="upload-zone" id="upload-zone">
         <div style="font-size: 32px;">&#128196;</div>
         <p><strong style="color: var(--rwth);">Klicken</strong> oder Datei hierher ziehen</p>
         <p style="font-size: 13px; margin-top: 4px;">.md Datei aus HedgeDoc-Export</p>
         <input type="file" id="file-input" accept=".md,.txt" style="display: none">
+      </div>
+      <div class="paste-label">
+        &hellip; oder Text direkt aus HedgeDoc einf&uuml;gen (in der Notiz im Bearbeitungsmodus
+        <strong>Cmd/Strg + A</strong>, dann <strong>Cmd/Strg + C</strong>):
+      </div>
+      <textarea id="paste-input" placeholder="Markdown hier einfügen …" spellcheck="false"></textarea>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-paste-apply">Eingef&uuml;gten Text &uuml;bernehmen</button>
       </div>
       <div class="file-status" id="file-status"></div>
     </div>
@@ -1811,26 +1840,59 @@ document.getElementById('btn-dl-agenda').addEventListener('click', function() {
 });
 
 
+/**
+ * Kopiert Text synchron über ein verstecktes Textfeld in die Zwischenablage.
+ * Synchron ist hier wichtig: Beim HedgeDoc-Button muss der neue Tab im selben
+ * Klick-Handler geöffnet werden (sonst greift der Pop-up-Blocker), und nach
+ * dem Öffnen hat die Seite keinen Fokus mehr für die asynchrone Clipboard-API.
+ * @returns {boolean} true, wenn das Kopieren geklappt hat
+ */
+function copyTextSync(text) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  var ok = false;
+  try { ok = document.execCommand('copy'); } catch(e) {}
+  document.body.removeChild(ta);
+  return ok;
+}
+
+/** Zeigt kurz eine Bestätigung im Button-Text an. */
+function flashButton(btn, html) {
+  var orig = btn.innerHTML;
+  btn.innerHTML = html;
+  btn.style.color = btn.classList.contains('btn-sec') ? 'var(--navy)' : '';
+  setTimeout(function() { btn.innerHTML = orig; btn.style.color = ''; }, 2500);
+}
+
 // Kopieren-Button: Markdown in Zwischenablage
 document.getElementById('btn-copy-md').addEventListener('click', function() {
   var md = buildMd();
+  var btn = this;
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(md).then(function() {
-      var btn = document.getElementById('btn-copy-md');
-      var orig = btn.innerHTML;
-      btn.innerHTML = '&#10003; Kopiert!';
-      btn.style.color = 'var(--navy)';
-      setTimeout(function() { btn.innerHTML = orig; btn.style.color = ''; }, 2000);
+      flashButton(btn, '&#10003; Kopiert!');
     }).catch(function() { alert('Kopieren fehlgeschlagen.'); });
+  } else if (copyTextSync(md)) {
+    flashButton(btn, '&#10003; Kopiert!');
   } else {
-    // Fallback für ältere Browser
-    var ta = document.createElement('textarea');
-    ta.value = md;
-    ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    try { document.execCommand('copy'); } catch(e) { alert('Kopieren fehlgeschlagen.'); }
-    document.body.removeChild(ta);
+    alert('Kopieren fehlgeschlagen.');
+  }
+});
+
+// HedgeDoc-Button: Vorlage kopieren und neue Notiz in neuem Tab öffnen.
+// Eine direkte Übergabe des Inhalts an HedgeDoc ist ohne CORS-Freigabe auf
+// dem Server nicht möglich, daher der Weg über die Zwischenablage.
+var HEDGEDOC_URL = 'https://hedgedoc.fsmb.rwth-aachen.de';
+document.getElementById('btn-open-hedgedoc').addEventListener('click', function() {
+  var copied = copyTextSync(buildMd());
+  window.open(HEDGEDOC_URL + '/new', '_blank', 'noopener');
+  if (copied) {
+    flashButton(this, '&#10003; Kopiert &ndash; in HedgeDoc mit Cmd/Strg + V einf&uuml;gen');
+  } else {
+    alert('Die Vorlage konnte nicht automatisch kopiert werden. Bitte über „Kopieren“ kopieren und in der geöffneten HedgeDoc-Notiz einfügen.');
   }
 });
 
@@ -1857,25 +1919,35 @@ document.getElementById('file-input').addEventListener('change', function() {
   if (this.files[0]) processFile(this.files[0]);
 });
 
+// Einfügen-Feld: Markdown direkt aus HedgeDoc übernehmen
+document.getElementById('btn-paste-apply').addEventListener('click', function() {
+  var text = document.getElementById('paste-input').value;
+  if (!text.trim()) { alert('Bitte zuerst den Protokolltext aus HedgeDoc einfügen.'); return; }
+  loadProtocolMd(text, 'Eingefügter Text');
+});
+
 /** Liest eine hochgeladene Markdown-Datei ein und aktualisiert die Vorschau. */
 function processFile(file) {
   var reader = new FileReader();
-  reader.onload = function(e) {
-    // Zeilenenden normalisieren (\r\n → \n), da Windows-Dateien sonst Regex-Matches brechen
-    uploadedMd = e.target.result.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-    // Status anzeigen
-    var st = document.getElementById('file-status');
-    st.style.display = 'block';
-    st.textContent = '\u2713 ' + file.name + ' geladen';
-
-    // Karten einblenden und Vorschau rendern
-    document.getElementById('preview-card').style.display = 'block';
-    document.getElementById('pdf-card').style.display     = 'block';
-    document.getElementById('preview-raw').textContent    = uploadedMd;
-    showRenderedView();
-  };
+  reader.onload = function(e) { loadProtocolMd(e.target.result, file.name); };
   reader.readAsText(file, 'UTF-8');
+}
+
+/** Übernimmt Protokoll-Markdown (Datei oder eingefügt) und aktualisiert die Vorschau. */
+function loadProtocolMd(text, sourceLabel) {
+  // Zeilenenden normalisieren (\r\n → \n), da Windows-Dateien sonst Regex-Matches brechen
+  uploadedMd = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Status anzeigen
+  var st = document.getElementById('file-status');
+  st.style.display = 'block';
+  st.textContent = '\u2713 ' + sourceLabel + ' geladen';
+
+  // Karten einblenden und Vorschau rendern
+  document.getElementById('preview-card').style.display = 'block';
+  document.getElementById('pdf-card').style.display     = 'block';
+  document.getElementById('preview-raw').textContent    = uploadedMd;
+  showRenderedView();
 }
 
 /**
@@ -1899,6 +1971,34 @@ function preprocessForPreview(md) {
   }).join('\n');
 }
 
+/**
+ * Wertet Tickboxen (GFM-Aufgabenlisten) aus: "- [x] Eintrag" wird als
+ * normaler Listenpunkt "- Eintrag" übernommen, "- [ ] Eintrag" samt
+ * eingerückter Folgezeilen/Unterpunkte entfernt. Codeblöcke bleiben unberührt.
+ */
+var TICKBOX_REGEX = /^(\s*)([-*+]|\d+[.)])\s+\[([ xX])\](?:\s+|$)(.*)$/;
+function applyTickboxes(md) {
+  var out = [];
+  var inFence = false;
+  var skipIndent = -1;   // Einrückung des zuletzt entfernten Eintrags (-1 = nichts entfernt)
+  var pendingBlank = []; // Leerzeilen innerhalb eines entfernten Eintrags (noch offen)
+  md.split('\n').forEach(function(line) {
+    if (skipIndent >= 0) {
+      if (!line.trim()) { pendingBlank.push(line); return; }
+      if (line.match(/^\s*/)[0].length > skipIndent) { pendingBlank = []; return; }
+      skipIndent = -1;
+      out = out.concat(pendingBlank);
+      pendingBlank = [];
+    }
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    var m = !inFence && line.match(TICKBOX_REGEX);
+    if (!m) { out.push(line); return; }
+    if (m[3] === ' ') { skipIndent = m[1].length; return; }
+    out.push(m[1] + m[2] + ' ' + m[4]);
+  });
+  return out.concat(pendingBlank).join('\n');
+}
+
 /** Zeigt die rohe Markdown-Quelle. */
 function showMdView() {
   document.getElementById('preview-raw').style.display     = 'block';
@@ -1910,7 +2010,7 @@ function showMdView() {
 /** Rendert das Markdown als formatiertes HTML. */
 function showRenderedView() {
   var raw  = uploadedMd.replace(/^---[\s\S]*?---\n/, '');
-  var prep = preprocessForPreview(raw);
+  var prep = preprocessForPreview(applyTickboxes(raw));
   document.getElementById('preview-content').innerHTML  = marked.parse(prep);
   document.getElementById('preview-content').style.display = 'block';
   document.getElementById('preview-raw').style.display     = 'none';
@@ -2530,15 +2630,24 @@ function pdfMetaRowsFor(meta) {
   return rows;
 }
 
-var LOGO_ASPECT = 120.94667 / 474.97333;
 var ADDRESS_GAP = pmm(10);
 
-function pdfHeaderHeightFor(meta) {
-  var logoH = pmm(40) * LOGO_ASPECT;
-  var addressLineH = 7 * 1.7; // 7pt Schrift × 1.7 Zeilenhöhe, bereits in pt (wie pmm()-Werte)
-  var leftH = pmm(14) + logoH + ADDRESS_GAP + ADDRESS_LINES.length * addressLineH;
-  var rightH = pmm(14) + pmm(17) + pdfMetaRowsFor(meta).length * pmm(7.4);
-  return Math.max(leftH, rightH) + pmm(8);
+/**
+ * Deckblatt-Kopf samt grüner Trennlinie und nachfolgendem Inhalt als ein
+ * gemeinsamer, oben links absolut positionierter Block. Linie und Inhalt
+ * folgen so im normalen Fluss direkt auf die tatsächliche Höhe des Kopfes –
+ * statt an einer vorab geschätzten Höhe, die z.B. umbrechende Adresszeilen
+ * oder den Logo-Ersatztext nicht berücksichtigt und dann mit dem Kopf
+ * überlappt.
+ */
+function pdfCoverBlock(meta, ctx, logoSvg, titleText, below) {
+  return {
+    stack: [
+      pdfCoverHeaderTable(meta, ctx, logoSvg, titleText),
+      { canvas: [{ type: 'rect', x: 0, y: 0, w: pmm(210), h: pmm(1), color: ctx.rwth }] }
+    ].concat(below || []),
+    absolutePosition: { x: 0, y: 0 }
+  };
 }
 
 /** Zweispaltiges Deckblatt-Kopfelement (Navy-Logospalte + Titel/Metadaten). */
@@ -2622,23 +2731,15 @@ function buildProtocolDocDefinition(opts) {
   var imageMap = opts.imageMap || {};
 
   var content = [];
-  var headerH = pdfHeaderHeightFor(meta);
 
-  var headerTable = pdfCoverHeaderTable(meta, ctx, logoSvg, 'Protokoll');
-  headerTable.absolutePosition = { x: 0, y: 0 };
-  content.push(headerTable);
-  content.push({
-    canvas: [{ type: 'rect', x: 0, y: 0, w: pmm(210), h: pmm(1), color: ctx.rwth }],
-    absolutePosition: { x: 0, y: headerH }
-  });
-  content.push({
+  content.push(pdfCoverBlock(meta, ctx, logoSvg, 'Protokoll', [{
     columns: [
       { width: pmm(93), stack: [pdfNoticeBox('Beschlüsse werden in der Reihenfolge (ja/nein/enthalten) bzw. (ja/nein/enthalten/ungültig) angegeben. Ein „M" stellt die nötige Mehrheit dar.', ctx)] },
       { width: pmm(93), stack: [pdfNoticeBox('Inhalte werden gemäß der Reihenfolge der Tagesordnungspunkte (TOP) wiedergegeben.', ctx)] }
     ],
     columnGap: pmm(4),
-    absolutePosition: { x: pmm(10), y: headerH + pmm(5) }
-  });
+    margin: [pmm(10), pmm(5), 0, 0]
+  }]));
   content.push({ text: '', pageBreak: 'after' });
 
   var tocNodes = pdfSectionHeading('Tagesordnung', ctx);
@@ -2771,16 +2872,7 @@ function buildProtocolDocDefinition(opts) {
  *   mit vier Leerzeichen eingerückte Zeilen gelten als Unterpunkt.
  */
 function buildAgendaDocDefinition(meta, tocLines, ctx, logoSvg) {
-  var headerH = pdfHeaderHeightFor(meta);
   var content = [];
-
-  var headerTable = pdfCoverHeaderTable(meta, ctx, logoSvg, 'Tagesordnung');
-  headerTable.absolutePosition = { x: 0, y: 0 };
-  content.push(headerTable);
-  content.push({
-    canvas: [{ type: 'rect', x: 0, y: 0, w: pmm(210), h: pmm(1), color: ctx.rwth }],
-    absolutePosition: { x: 0, y: headerH }
-  });
 
   var agendaNodes = [];
   tocLines.forEach(function(line) {
@@ -2791,10 +2883,10 @@ function buildAgendaDocDefinition(meta, tocLines, ctx, logoSvg) {
     });
   });
 
-  content.push({
+  content.push(pdfCoverBlock(meta, ctx, logoSvg, 'Tagesordnung', [{
     stack: agendaNodes,
-    absolutePosition: { x: pmm(10), y: headerH + pmm(8) }
-  });
+    margin: [pmm(10), pmm(8), 0, 0]
+  }]));
 
   return {
     pageSize: 'A4',
@@ -2845,7 +2937,7 @@ document.getElementById('btn-pdf').addEventListener('click', function() {
 
   setProgress(15, 'Metadaten werden gelesen...');
   var meta    = parseMeta(uploadedMd);
-  var rawBody = uploadedMd.replace(/^---[\s\S]*?---\n/, '');
+  var rawBody = applyTickboxes(uploadedMd.replace(/^---[\s\S]*?---\n/, ''));
 
   setProgress(35, 'Abschnitte werden verarbeitet...');
   var attendanceMd  = extractSection(rawBody, 'Anwesenheitsliste');
