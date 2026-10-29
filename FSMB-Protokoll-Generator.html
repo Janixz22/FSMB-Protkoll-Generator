@@ -314,6 +314,11 @@ header {
 .btn-sec                { background: transparent; color: var(--text); border-color: var(--border); }
 .btn-sec:hover:not(:disabled)     { background: var(--hover); }
 .btn-row                { display: flex; gap: 8px; flex-wrap: wrap; }
+a.btn                   { text-decoration: none; }
+
+/* Notion-HTML-Block (eingebettet, ohne Downloads) vs. eigenständige Seite */
+html.embedded .only-standalone,
+html:not(.embedded) .only-embedded { display: none !important; }
 .btn-tiny {
   font-size: 12px;
   padding: 1px 7px;
@@ -622,7 +627,7 @@ header {
       <div class="card-title">Vorlage f&uuml;r Notion</div>
       <div class="btn-row">
         <button class="btn btn-dl" id="btn-copy-md" title="Vorlage in die Zwischenablage kopieren">&#128203; Vorlage kopieren</button>
-        <button class="btn btn-sec" id="btn-dl-md" title="Vorlage inkl. Metadaten als .md-Datei herunterladen">&#8595; Markdown herunterladen</button>
+        <button class="btn btn-sec only-standalone" id="btn-dl-md" title="Vorlage inkl. Metadaten als .md-Datei herunterladen">&#8595; Markdown herunterladen</button>
       </div>
       <div class="notice">
         <strong>Vorlage kopieren</strong>, eine neue Notion-Seite anlegen und mit dem Cursor
@@ -637,11 +642,15 @@ header {
     <div class="card">
       <div class="card-title">Tagesordnung vorab verschicken</div>
       <div class="btn-row">
-        <button class="btn btn-sec" id="btn-dl-agenda">&#8595; Tagesordnung als PDF</button>
+        <button class="btn btn-sec only-standalone" id="btn-dl-agenda">&#8595; Tagesordnung als PDF</button>
+        <a class="btn btn-sec only-embedded" id="link-agenda-browser" target="_blank" rel="noopener">&#8599; Tagesordnung im Browser erzeugen</a>
       </div>
       <div class="notice">
         Erzeugt ein kompaktes PDF mit Sitzungsmetadaten und der aktuell
         gew&auml;hlten Tagesordnung &ndash; zum Rundschicken vor der Sitzung.
+        <span class="only-embedded">Da im Notion-Block keine Downloads m&ouml;glich sind, wird die
+        Tagesordnung in die Zwischenablage kopiert und der Generator im Browser ge&ouml;ffnet &ndash;
+        dort <strong>Cmd/Strg + V</strong> dr&uuml;cken und das PDF herunterladen.</span>
       </div>
     </div>
 
@@ -651,6 +660,12 @@ header {
 <!-- ── Tab 2: Export & PDF ───────────────────────────────────────────────── -->
 <div class="page" id="page-export">
   <div class="container">
+
+    <!-- Hinweis nach Übergabe aus dem Notion-Block (Aufruf mit #pdf-import) -->
+    <div class="notice notice-warn" id="import-hint" style="display:none; margin-top:0; margin-bottom:1rem;">
+      <strong>&Uuml;bergabe aus Notion:</strong> Jetzt <strong>Cmd/Strg + V</strong> dr&uuml;cken, um den
+      kopierten Text zu &uuml;bernehmen &ndash; danach das PDF &uuml;ber den Button weiter unten herunterladen.
+    </div>
 
     <div class="card">
       <div class="card-title">Protokoll laden</div>
@@ -687,7 +702,14 @@ header {
     <div class="card" id="pdf-card" style="display: none;">
       <div class="card-title">PDF erzeugen</div>
       <div class="btn-row">
-        <button class="btn btn-dl" id="btn-pdf">&#8595; PDF herunterladen</button>
+        <button class="btn btn-dl only-standalone" id="btn-pdf">&#8595; PDF herunterladen</button>
+        <button class="btn btn-sec only-standalone" id="btn-pdf-agenda">&#8595; Tagesordnung als PDF</button>
+        <a class="btn btn-dl only-embedded" id="link-pdf-browser" target="_blank" rel="noopener">&#8599; PDF im Browser erzeugen</a>
+      </div>
+      <div class="notice only-embedded">
+        Im Notion-Block sind keine Downloads m&ouml;glich. <strong>PDF im Browser erzeugen</strong>
+        kopiert Protokoll, Modus und Metadaten in die Zwischenablage und &ouml;ffnet den Generator
+        im Browser &ndash; dort <strong>Cmd/Strg + V</strong> dr&uuml;cken und das PDF herunterladen.
       </div>
       <div class="progress-wrap" id="pw">
         <div class="progress-label"><span class="spinner"></span><span id="pl">Wird vorbereitet...</span></div>
@@ -826,6 +848,14 @@ header {
 // FSV PROTOKOLL-GENERATOR
 // Fachschaftsvertretung Maschinenbau · RWTH Aachen
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// Umgebung: Im Notion-HTML-Block läuft die Seite in einem Sandbox-iframe, in
+// dem keine Downloads möglich sind. Dort werden PDFs stattdessen per
+// Zwischenablage an die über GitHub Pages bereitgestellte Fassung derselben
+// Datei übergeben (siehe handoffToBrowser), die sie ganz normal herunterlädt.
+var PAGES_URL = 'https://janixz22.github.io/FSMB-Protkoll-Generator/FSMB-Protokoll-Generator.html';
+var EMBEDDED = (function() { try { return window.self !== window.top; } catch(e) { return true; } })();
+if (EMBEDDED) document.documentElement.classList.add('embedded');
 
 // FSMB-Logo: liegt als externe Datei "logo.svg" im selben Ordner (siehe
 // README). Automatisches Nachladen per fetch() funktioniert zuverlässig,
@@ -1906,33 +1936,8 @@ function buildMd(withFrontmatter) {
   if (sel['top11'] || sel['top_versch'])  addTop('Verschiedenes', null, '\n\n>Die Sitzung wird um XX:XX Uhr geschlossen.\n\n@Ende(XX:XX)');
 
   // ── Zusammenbauen ────────────────────────────────────────────────────────
-  var agLabel   = (currentMode === 'ag'   && m.agname)      ? m.agname      + '-Sitzung'    : 'AG-Sitzung';
-  var gremienLabel = (currentMode === 'gremien' && m.gremienGremium) ? m.gremienGremium + '-Vorbesprechung' : 'Vorbesprechung';
-  var ausschussLabel = (currentMode === 'ausschuss' && m.ausschuss) ? m.ausschuss + '-Sitzung' : 'Ausschuss-Sitzung';
-  var titleStr = currentMode === 'ag'
-    ? ('Protokoll der ' + m.sitzung + '. ' + agLabel)
-    : currentMode === 'gremien'
-    ? ('Protokoll der ' + m.sitzung + '. ' + gremienLabel)
-    : currentMode === 'ausschuss'
-    ? ('Protokoll der ' + m.sitzung + '. ' + ausschussLabel)
-    : ('Protokoll der ' + m.sitzung + '. ' + (currentMode === 'fas' ? 'FaS' : 'FSV') + '-Sitzung');
-
-  var frontmatter =
-    '---\n' +
-    'title: "' + titleStr + '"\n' +
-    'date: "' + m.date + '"\n' +
-    (m.gremium     ? 'gremium: "'     + m.gremium     + '"\n' : '') +
-    (currentMode === 'ag'        && m.agname         ? 'agname: "'      + m.agname         + '"\n' : '') +
-    (currentMode === 'gremien'   && m.gremienGremium ? 'gremiumname: "' + m.gremienGremium + '"\n' : '') +
-    (currentMode === 'ausschuss' && m.ausschuss      ? 'ausschuss: "'   + m.ausschuss      + '"\n' : '') +
-    (m.wahlperiode ? 'wahlperiode: "' + m.wahlperiode + '"\n' : '') +
-    'sitzung: ' + m.sitzung + '\n' +
-    'ort: "' + m.ort + '"\n' +
-    'sitzungsleitung: "' + m.leitung + '"\n' +
-    'protokollfuehrung: "' + m.proto + '"\n' +
-    'beginn: "' + m.beginn + '"\n' +
-    'ende: "' + m.ende + '"\n' +
-    '---\n\n';
+  var titleStr    = buildTitle(m);
+  var frontmatter = buildFrontmatter(m);
 
   // Für die separate Tagesordnungs-PDF (siehe btn-dl-agenda) merken: buildMd()
   // ist die einzige Stelle, die TOC-Zeilen und Titel modusabhängig ermittelt.
@@ -1950,6 +1955,44 @@ function buildMd(withFrontmatter) {
          '# Tagesordnung\n\n' + tocPlaceholder + '\n\n' +
          buildAttendanceMd() +
          '# Protokoll\n\n' + body.join('\n');
+}
+
+/** Protokolltitel für den aktuellen Modus, z.B. "Protokoll der 7. FSV-Sitzung". */
+function buildTitle(m) {
+  var agLabel   = (currentMode === 'ag'   && m.agname)      ? m.agname      + '-Sitzung'    : 'AG-Sitzung';
+  var gremienLabel = (currentMode === 'gremien' && m.gremienGremium) ? m.gremienGremium + '-Vorbesprechung' : 'Vorbesprechung';
+  var ausschussLabel = (currentMode === 'ausschuss' && m.ausschuss) ? m.ausschuss + '-Sitzung' : 'Ausschuss-Sitzung';
+  return currentMode === 'ag'
+    ? ('Protokoll der ' + m.sitzung + '. ' + agLabel)
+    : currentMode === 'gremien'
+    ? ('Protokoll der ' + m.sitzung + '. ' + gremienLabel)
+    : currentMode === 'ausschuss'
+    ? ('Protokoll der ' + m.sitzung + '. ' + ausschussLabel)
+    : ('Protokoll der ' + m.sitzung + '. ' + (currentMode === 'fas' ? 'FaS' : 'FSV') + '-Sitzung');
+}
+
+/**
+ * YAML-Frontmatter mit den Sitzungsmetadaten. "modus" hält den Sitzungstyp
+ * fest, damit Vorschau/PDF beim Laden (z.B. nach der Übergabe aus dem
+ * Notion-Block) Farben und Struktur des richtigen Modus verwenden.
+ */
+function buildFrontmatter(m) {
+  return '---\n' +
+    'title: "' + buildTitle(m) + '"\n' +
+    'modus: ' + currentMode + '\n' +
+    'date: "' + m.date + '"\n' +
+    (m.gremium     ? 'gremium: "'     + m.gremium     + '"\n' : '') +
+    (currentMode === 'ag'        && m.agname         ? 'agname: "'      + m.agname         + '"\n' : '') +
+    (currentMode === 'gremien'   && m.gremienGremium ? 'gremiumname: "' + m.gremienGremium + '"\n' : '') +
+    (currentMode === 'ausschuss' && m.ausschuss      ? 'ausschuss: "'   + m.ausschuss      + '"\n' : '') +
+    (m.wahlperiode ? 'wahlperiode: "' + m.wahlperiode + '"\n' : '') +
+    'sitzung: ' + m.sitzung + '\n' +
+    'ort: "' + m.ort + '"\n' +
+    'sitzungsleitung: "' + m.leitung + '"\n' +
+    'protokollfuehrung: "' + m.proto + '"\n' +
+    'beginn: "' + m.beginn + '"\n' +
+    'ende: "' + m.ende + '"\n' +
+    '---\n\n';
 }
 
 /** Kürzt eine Wahlperiode für den Dateinamen: "2025-2026" → "-2526" */
@@ -1979,18 +2022,14 @@ document.getElementById('btn-dl-md').addEventListener('click', function() {
   setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
 });
 
-// Tagesordnung-Button: kompaktes PDF mit Metadaten + TOP-Liste zum Vorab-Verschicken
-document.getElementById('btn-dl-agenda').addEventListener('click', function() {
-  var btn = this;
-  buildMd(); // Nebeneffekt: befüllt LAST_AGENDA_DATA mit toc/titleStr/m für den aktuellen Modus
-  var data = LAST_AGENDA_DATA;
-  if (!data || !data.toc.length) { alert('Bitte zuerst mindestens einen Tagesordnungspunkt auswählen.'); return; }
-
-  var meta = pdfMetaFromGenerator(data.m);
-
+/**
+ * Erzeugt das kompakte Tagesordnungs-PDF und lädt es herunter.
+ * @param {Array<string>} tocLines - TOP-Zeilen; Unterpunkte mit vier Leerzeichen eingerückt
+ */
+function downloadAgendaPdf(meta, tocLines, btn) {
   btn.disabled = true;
   Promise.all([loadPdfFonts(), loadLogoSvg()]).then(function(results) {
-    var docDefinition = buildAgendaDocDefinition(meta, data.toc, pdfModeColors(), results[1]);
+    var docDefinition = buildAgendaDocDefinition(meta, tocLines, pdfModeColors(), results[1]);
     var modeShort = currentMode === 'gremien' ? 'GREMIEN' : currentMode.toUpperCase();
     var filename = 'Tagesordnung-' + modeShort + shortWp(meta.wahlperiode) + '-Sitzung-' + String(meta.sitzung || 'X').padStart(2, '0') + '.pdf';
     pdfMake.createPdf(docDefinition).download(filename);
@@ -1999,6 +2038,14 @@ document.getElementById('btn-dl-agenda').addEventListener('click', function() {
     btn.disabled = false;
     alert('Fehler bei der PDF-Erzeugung: ' + err.message);
   });
+}
+
+// Tagesordnung-Button: kompaktes PDF mit Metadaten + TOP-Liste zum Vorab-Verschicken
+document.getElementById('btn-dl-agenda').addEventListener('click', function() {
+  buildMd(); // Nebeneffekt: befüllt LAST_AGENDA_DATA mit toc/titleStr/m für den aktuellen Modus
+  var data = LAST_AGENDA_DATA;
+  if (!data || !data.toc.length) { alert('Bitte zuerst mindestens einen Tagesordnungspunkt auswählen.'); return; }
+  downloadAgendaPdf(pdfMetaFromGenerator(data.m), data.toc, this);
 });
 
 
@@ -2042,6 +2089,50 @@ document.getElementById('btn-copy-md').addEventListener('click', function() {
   } else {
     alert('Kopieren fehlgeschlagen.');
   }
+});
+
+
+// ── Übergabe aus dem Notion-Block an die Browser-Fassung ─────────────────────
+// Die Links öffnen PAGES_URL#pdf-import (Notion fragt vorher nach, ob die
+// Webseite geöffnet werden soll). Der Inhalt wird im selben Klick synchron
+// kopiert – nach dem Öffnen hat der Block keinen Fokus mehr für die
+// asynchrone Clipboard-API. Übergeben wird Markdown mit Frontmatter, das sich
+// dort per Cmd/Strg + V (oder über das Einfügefeld) laden lässt.
+var HANDOFF_URL = PAGES_URL + '#pdf-import';
+document.getElementById('link-pdf-browser').href    = HANDOFF_URL;
+document.getElementById('link-agenda-browser').href = HANDOFF_URL;
+
+function handoffToBrowser(md) {
+  if (copyTextSync(md)) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(md).catch(function() {});
+}
+
+/**
+ * Ergänzt geladenes Protokoll-Markdown um Metadaten: Ohne Frontmatter (aus
+ * Notion eingefügt) werden die Angaben aus dem Generator-Tab vorangestellt,
+ * einem vorhandenen Frontmatter ohne "modus" wird der aktuelle Modus ergänzt.
+ */
+function withHandoffFrontmatter(md) {
+  if (!hasFrontmatter(md)) return buildFrontmatter(getMeta()) + md;
+  if (parseMeta(md).modus) return md;
+  return md.replace(/^---\n/, '---\nmodus: ' + currentMode + '\n');
+}
+
+document.getElementById('link-pdf-browser').addEventListener('click', function(e) {
+  if (!uploadedMd) { e.preventDefault(); return; }
+  handoffToBrowser(withHandoffFrontmatter(uploadedMd));
+});
+
+// Tagesordnung: komplette Vorlage samt Frontmatter; "export: tagesordnung"
+// sorgt dafür, dass die Browser-Fassung das Tagesordnungs-PDF anbietet.
+document.getElementById('link-agenda-browser').addEventListener('click', function(e) {
+  var md = buildMd(true);
+  if (!LAST_AGENDA_DATA || !LAST_AGENDA_DATA.toc.length) {
+    e.preventDefault();
+    alert('Bitte zuerst mindestens einen Tagesordnungspunkt auswählen.');
+    return;
+  }
+  handoffToBrowser(md.replace(/^---\n/, '---\nexport: tagesordnung\n'));
 });
 
 
@@ -2095,13 +2186,52 @@ function loadProtocolMd(text, sourceLabel) {
   document.getElementById('preview-card').style.display = 'block';
   document.getElementById('pdf-card').style.display     = 'block';
   document.getElementById('preview-raw').textContent    = uploadedMd;
+  document.getElementById('import-hint').style.display  = 'none';
+
+  // Modus aus dem Frontmatter übernehmen (z.B. nach Übergabe aus dem Notion-Block)
+  var fm = hasFrontmatter(uploadedMd) ? parseMeta(uploadedMd) : {};
+  if (fm.modus && MODES[fm.modus] && fm.modus !== currentMode) {
+    setMode(fm.modus, document.querySelector('.mode-btn[data-mode="' + fm.modus + '"]'));
+  }
+  // Bei übergebener Tagesordnung den Tagesordnungs-Button hervorheben
+  var isAgenda = fm.export === 'tagesordnung';
+  document.getElementById('btn-pdf').className        = 'btn only-standalone ' + (isAgenda ? 'btn-sec' : 'btn-dl');
+  document.getElementById('btn-pdf-agenda').className = 'btn only-standalone ' + (isAgenda ? 'btn-dl' : 'btn-sec');
+
   document.getElementById('meta-source').innerHTML = hasFrontmatter(uploadedMd)
-    ? 'Die Sitzungsmetadaten f&uuml;r das PDF stammen aus dem Metadatenblock der geladenen Datei.'
+    ? 'Die Sitzungsmetadaten f&uuml;r das PDF stammen aus dem Metadatenblock der geladenen Datei' +
+      (fm.modus && MODES[fm.modus] ? ', der Modus (' + MODES[fm.modus].name + ') wurde &uuml;bernommen.' : '.')
     : '<strong>Kein Metadatenblock gefunden</strong> (z.&thinsp;B. bei aus Notion eingef&uuml;gtem Text) &ndash; ' +
       'f&uuml;r das PDF werden Modus und Sitzungsmetadaten aus dem Tab <strong>Generator</strong> ' +
       'verwendet. Bitte dort vor dem Erzeugen pr&uuml;fen.';
   showRenderedView();
 }
+
+// Cmd/Strg + V im Tab "Export & PDF" übernimmt den Text direkt (z.B. nach der
+// Übergabe aus dem Notion-Block), solange kein Eingabefeld fokussiert ist.
+document.addEventListener('paste', function(e) {
+  if (!document.getElementById('page-export').classList.contains('active')) return;
+  var t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  var text = e.clipboardData ? e.clipboardData.getData('text/plain') : '';
+  if (!text.trim()) return;
+  e.preventDefault();
+  document.getElementById('paste-input').value = text;
+  loadProtocolMd(text, 'Text aus der Zwischenablage');
+  document.getElementById('pdf-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+// Tagesordnungs-PDF aus dem geladenen Markdown: TOPs aus den Überschriften
+document.getElementById('btn-pdf-agenda').addEventListener('click', function() {
+  if (!uploadedMd) return;
+  var proto = extractSection(applyTickboxes(protocolBody(uploadedMd)), 'Protokoll');
+  var tocLines = buildTocFromProtocol(marked.parse(proto || '')).map(function(it) {
+    return (it.level === 1 ? '    ' : '') + it.text;
+  });
+  if (!tocLines.length) { alert('Im geladenen Text wurden keine Tagesordnungspunkte gefunden.'); return; }
+  var meta = hasFrontmatter(uploadedMd) ? parseMeta(uploadedMd) : pdfMetaFromGenerator();
+  downloadAgendaPdf(meta, tocLines, this);
+});
 
 /** Prüft, ob das Markdown mit einem YAML-Frontmatter-Block beginnt. */
 function hasFrontmatter(md) {
@@ -3220,8 +3350,18 @@ document.getElementById('cfg-save').addEventListener('click', function() {
   setTimeout(function() { st.style.display = 'none'; }, 2000);
 });
 
+// Im Notion-Block sind keine Downloads möglich: JSON stattdessen kopieren
+if (EMBEDDED) document.getElementById('cfg-export').innerHTML = '&#128203; JSON kopieren';
+
 document.getElementById('cfg-export').addEventListener('click', function() {
   var cfg = getConfig();
+  if (EMBEDDED) {
+    var json = JSON.stringify(cfg, null, 2);
+    if (!copyTextSync(json)) { alert('Kopieren fehlgeschlagen.'); return; }
+    flashButton(this, '&#10003; Kopiert &ndash; als FSMB-Konfiguration.json speichern');
+    touchConfigMeta('export');
+    return;
+  }
   var blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
   var url  = URL.createObjectURL(blob);
   var a    = document.createElement('a');
@@ -3489,6 +3629,12 @@ if (dateField && !dateField.value) {
 }
 
 renderTops();
+
+// Aufruf aus dem Notion-Block (siehe handoffToBrowser): direkt zum Export-Tab
+if (location.hash === '#pdf-import') {
+  showPage('export', document.querySelectorAll('.tab')[1]);
+  document.getElementById('import-hint').style.display = 'block';
+}
 
 </script>
 </body>
