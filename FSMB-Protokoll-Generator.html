@@ -627,14 +627,16 @@ html:not(.embedded) .only-embedded { display: none !important; }
       <div class="card-title">Vorlage f&uuml;r Notion</div>
       <div class="btn-row">
         <button class="btn btn-dl" id="btn-copy-md" title="Vorlage in die Zwischenablage kopieren">&#128203; Vorlage kopieren</button>
-        <button class="btn btn-sec only-standalone" id="btn-dl-md" title="Vorlage inkl. Metadaten als .md-Datei herunterladen">&#8595; Markdown herunterladen</button>
+        <button class="btn btn-sec only-standalone" id="btn-dl-md" title="Vorlage als .md-Datei herunterladen">&#8595; Markdown herunterladen</button>
       </div>
       <div class="notice">
         <strong>Vorlage kopieren</strong>, eine neue Notion-Seite anlegen und mit dem Cursor
         im <strong>Titelfeld</strong> <strong>Cmd/Strg + V</strong> dr&uuml;cken &ndash; die erste Zeile
         wird zum Seitentitel, der Rest wandelt Notion automatisch in &Uuml;berschriften, Listen,
         Tabellen und Codebl&ouml;cke um. Den Platzhalter unter &bdquo;Tagesordnung&ldquo; durch
-        <strong>/Inhaltsverzeichnis</strong> ersetzen. Nach der Sitzung den
+        <strong>/Inhaltsverzeichnis</strong> ersetzen. Die Tabelle <strong>Sitzungsdaten</strong>
+        (Datum, Ort, Sitzungsleitung &hellip;) l&auml;sst sich in Notion jederzeit anpassen &ndash; der
+        PDF-Export liest sie von dort. Nach der Sitzung den
         Seiteninhalt im Tab <strong>Export &amp; PDF</strong> einf&uuml;gen.
       </div>
     </div>
@@ -856,6 +858,8 @@ html:not(.embedded) .only-embedded { display: none !important; }
 var PAGES_URL = 'https://janixz22.github.io/FSMB-Protkoll-Generator/FSMB-Protokoll-Generator.html';
 var EMBEDDED = (function() { try { return window.self !== window.top; } catch(e) { return true; } })();
 if (EMBEDDED) document.documentElement.classList.add('embedded');
+// Art der Übergabe beim Aufruf aus dem Notion-Block (siehe Links in handoffToBrowser)
+var IMPORT_KIND = { '#pdf-import': 'protocol', '#agenda-import': 'agenda' }[location.hash] || null;
 
 // FSMB-Logo: liegt als externe Datei "logo.svg" im selben Ordner (siehe
 // README). Automatisches Nachladen per fetch() funktioniert zuverlässig,
@@ -1701,7 +1705,7 @@ function getMeta() {
 
 /**
  * Wandelt getMeta()-Werte in das Metadaten-Format des PDF-Aufbaus um (gleiche
- * Schlüssel und modusabhängige Felder wie im YAML-Frontmatter, siehe buildMd).
+ * Schlüssel wie parseMeta/parseMetaTable, nur die für den Modus relevanten Felder).
  */
 function pdfMetaFromGenerator(m) {
   m = m || getMeta();
@@ -1731,12 +1735,11 @@ function getItemTitle(label) {
  * [TOC] – unter "Tagesordnung" steht daher ein Platzhalter für den
  * Notion-Block "Inhaltsverzeichnis".
  * Beim Export werden die Überschriften per normalizeNotionMd() wieder auf
- * die vom PDF-Aufbau erwarteten Ebenen gebracht.
- * @param {boolean} withFrontmatter - YAML-Frontmatter mit den Sitzungs-
- *   metadaten voranstellen (für den .md-Download; beim Einfügen in Notion
- *   würde es als Fließtext erscheinen und entfällt daher)
+ * die vom PDF-Aufbau erwarteten Ebenen gebracht. Die Sitzungsmetadaten
+ * stehen als Tabelle "Sitzungsdaten" in der Seite (siehe buildMetaTableMd)
+ * und werden beim Export von dort gelesen.
  */
-function buildMd(withFrontmatter) {
+function buildMd() {
   var m    = getMeta();
   var toc  = [];   // Tagesordnungszeilen
   var body = [];   // Protokollinhalt
@@ -1936,8 +1939,7 @@ function buildMd(withFrontmatter) {
   if (sel['top11'] || sel['top_versch'])  addTop('Verschiedenes', null, '\n\n>Die Sitzung wird um XX:XX Uhr geschlossen.\n\n@Ende(XX:XX)');
 
   // ── Zusammenbauen ────────────────────────────────────────────────────────
-  var titleStr    = buildTitle(m);
-  var frontmatter = buildFrontmatter(m);
+  var titleStr = buildTitle(m);
 
   // Für die separate Tagesordnungs-PDF (siehe btn-dl-agenda) merken: buildMd()
   // ist die einzige Stelle, die TOC-Zeilen und Titel modusabhängig ermittelt.
@@ -1950,8 +1952,8 @@ function buildMd(withFrontmatter) {
 
   // Erste Zeile = Titel aus den Metadaten: beim Einfügen in das Titelfeld einer
   // neuen Notion-Seite übernimmt Notion sie als Seitentitel, der Rest wird zu Blöcken.
-  return (withFrontmatter ? frontmatter : '') +
-         titleStr + '\n\n' +
+  return titleStr + '\n\n' +
+         buildMetaTableMd('# ') +
          '# Tagesordnung\n\n' + tocPlaceholder + '\n\n' +
          buildAttendanceMd() +
          '# Protokoll\n\n' + body.join('\n');
@@ -1971,28 +1973,109 @@ function buildTitle(m) {
     : ('Protokoll der ' + m.sitzung + '. ' + (currentMode === 'fas' ? 'FaS' : 'FSV') + '-Sitzung');
 }
 
+// ── Tabelle "Sitzungsdaten" ───────────────────────────────────────────────────
+// Feldname in der Tabelle → Schlüssel im PDF-Metadatenobjekt (siehe
+// pdfMetaRowsFor). "Sitzungsart" bestimmt den Modus; das Gremium von FSV/FaS
+// ergibt sich daraus (MODES[..].gremium) und steht daher nicht in der Tabelle.
+var META_TABLE_FIELDS = [
+  ['Sitzungsart',      null],
+  ['AG-Name',          'agname'],
+  ['Gremium',          'gremiumname'],
+  ['Ausschuss',        'ausschuss'],
+  ['Wahlperiode',      'wahlperiode'],
+  ['Sitzungsnummer',   'sitzung'],
+  ['Datum',            'date'],
+  ['Ort',              'ort'],
+  ['Sitzungsleitung',  'sitzungsleitung'],
+  ['Protokollführung', 'protokollfuehrung']
+];
+
+/** Anzeigetext der Sitzungsart, z.B. "FSV – Fachschaftsvertretung". */
+function modeLabelText(mode) {
+  return MODES[mode].name + ' – ' + MODES[mode].label;
+}
+
+/** Ermittelt den Modus aus dem Sitzungsart-Text (Kurzname oder Bezeichnung). */
+function modeFromLabelText(text) {
+  var t = (text || '').trim().toLowerCase();
+  if (!t) return null;
+  return Object.keys(MODES).find(function(k) {
+    var name = MODES[k].name.toLowerCase(), label = MODES[k].label.toLowerCase();
+    return t === name || t.indexOf(name + ' ') === 0 || t.indexOf(label) !== -1;
+  }) || null;
+}
+
 /**
- * YAML-Frontmatter mit den Sitzungsmetadaten. "modus" hält den Sitzungstyp
- * fest, damit Vorschau/PDF beim Laden (z.B. nach der Übergabe aus dem
- * Notion-Block) Farben und Struktur des richtigen Modus verwenden.
+ * Markdown-Tabelle "Sitzungsdaten" mit den Generator-Eingaben – nur die für
+ * den aktuellen Modus relevanten Felder.
+ * @param {string} hashes - Überschriftenpräfix ("# " für Notion, "## " für HedgeDoc-Format)
  */
-function buildFrontmatter(m) {
-  return '---\n' +
-    'title: "' + buildTitle(m) + '"\n' +
-    'modus: ' + currentMode + '\n' +
-    'date: "' + m.date + '"\n' +
-    (m.gremium     ? 'gremium: "'     + m.gremium     + '"\n' : '') +
-    (currentMode === 'ag'        && m.agname         ? 'agname: "'      + m.agname         + '"\n' : '') +
-    (currentMode === 'gremien'   && m.gremienGremium ? 'gremiumname: "' + m.gremienGremium + '"\n' : '') +
-    (currentMode === 'ausschuss' && m.ausschuss      ? 'ausschuss: "'   + m.ausschuss      + '"\n' : '') +
-    (m.wahlperiode ? 'wahlperiode: "' + m.wahlperiode + '"\n' : '') +
-    'sitzung: ' + m.sitzung + '\n' +
-    'ort: "' + m.ort + '"\n' +
-    'sitzungsleitung: "' + m.leitung + '"\n' +
-    'protokollfuehrung: "' + m.proto + '"\n' +
-    'beginn: "' + m.beginn + '"\n' +
-    'ende: "' + m.ende + '"\n' +
-    '---\n\n';
+function buildMetaTableMd(hashes) {
+  var meta = pdfMetaFromGenerator();
+  var mc = MODES[currentMode];
+  var relevant = {
+    agname: currentMode === 'ag', gremiumname: currentMode === 'gremien',
+    ausschuss: currentMode === 'ausschuss', wahlperiode: mc.hasWahlperiode
+  };
+  var cell = function(v) { return String(v || '').replace(/\|/g, '/').replace(/\n/g, ' '); };
+  var rows = META_TABLE_FIELDS.filter(function(f) {
+    return !f[1] || !(f[1] in relevant) || relevant[f[1]];
+  }).map(function(f) {
+    return '| ' + f[0] + ' | ' + cell(f[1] ? meta[f[1]] : modeLabelText(currentMode)) + ' |';
+  });
+  return hashes + 'Sitzungsdaten\n\n| Feld | Wert |\n|---|---|\n' + rows.join('\n') + '\n\n';
+}
+
+/**
+ * Liest die Tabelle "Sitzungsdaten" aus (normalisiertes Markdown, siehe
+ * protocolBody). Alle Tabellenzeilen werden ausgewertet – auch eine evtl.
+ * als Kopfzeile interpretierte erste Zeile –, unbekannte Felder ignoriert.
+ * @returns {{meta: Object, mode: string|null}|null} null ohne Tabelle
+ */
+function parseMetaTable(body) {
+  var section = extractSection(body, 'Sitzungsdaten');
+  if (!section) return null;
+  var div = document.createElement('div');
+  div.innerHTML = marked.parse(section);
+  var table = div.querySelector('table');
+  if (!table) return null;
+  var norm = function(s) { return s.replace(/[*_:]/g, '').trim().toLowerCase(); };
+  var meta = { beginn: '', ende: '' }, mode = null;
+  table.querySelectorAll('tr').forEach(function(tr) {
+    var cells = tr.querySelectorAll('th, td');
+    if (cells.length < 2) return;
+    var key = norm(cells[0].textContent), val = cells[1].textContent.trim();
+    var field = META_TABLE_FIELDS.find(function(f) { return norm(f[0]) === key; });
+    if (!field) return;
+    if (field[1]) meta[field[1]] = val;
+    else mode = modeFromLabelText(val);
+  });
+  if (mode) meta.gremium = MODES[mode].gremium;
+  return { meta: meta, mode: mode };
+}
+
+/** Leitet bei älteren Dateien mit YAML-Frontmatter den Modus aus den Feldern ab. */
+function modeFromFrontmatter(fm) {
+  if (fm.agname) return 'ag';
+  if (fm.gremiumname) return 'gremien';
+  if (fm.ausschuss) return 'ausschuss';
+  return Object.keys(MODES).find(function(k) { return MODES[k].gremium && MODES[k].gremium === fm.gremium; }) || null;
+}
+
+/**
+ * Ermittelt Sitzungsmetadaten und Modus eines geladenen Protokolls:
+ * 1. Tabelle "Sitzungsdaten" (Notion-Vorlage), 2. YAML-Frontmatter (ältere
+ * HedgeDoc-Dateien), 3. Notfall-Rückfall auf die Eingaben im Generator-Tab.
+ * @returns {{meta: Object, mode: string|null, source: string}}
+ */
+function getSessionMeta(md) {
+  var t = parseMetaTable(protocolBody(md));
+  if (t) return { meta: t.meta, mode: t.mode, source: 'table' };
+  if (hasFrontmatter(md)) {
+    var fm = parseMeta(md);
+    return { meta: fm, mode: modeFromFrontmatter(fm), source: 'frontmatter' };
+  }
+  return { meta: pdfMetaFromGenerator(), mode: null, source: 'generator' };
 }
 
 /** Kürzt eine Wahlperiode für den Dateinamen: "2025-2026" → "-2526" */
@@ -2005,9 +2088,9 @@ function shortWp(wp) {
   return '-' + wp;
 }
 
-// Download-Button: Markdown-Datei (inkl. Metadaten-Frontmatter) herunterladen
+// Download-Button: Vorlage als Markdown-Datei herunterladen
 document.getElementById('btn-dl-md').addEventListener('click', function() {
-  var md  = buildMd(true);
+  var md  = buildMd();
   var m   = getMeta();
   var blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
   var url  = URL.createObjectURL(blob);
@@ -2074,10 +2157,10 @@ function flashButton(btn, html) {
   setTimeout(function() { btn.innerHTML = orig; btn.style.color = ''; }, 2500);
 }
 
-// Kopieren-Button: Vorlage (ohne Frontmatter) als Markdown in die
-// Zwischenablage – Notion wandelt eingefügtes Markdown in Blöcke um.
+// Kopieren-Button: Vorlage als Markdown in die Zwischenablage – Notion
+// wandelt eingefügtes Markdown in Blöcke um.
 document.getElementById('btn-copy-md').addEventListener('click', function() {
-  var md = buildMd(false);
+  var md = buildMd();
   var btn = this;
   var done = function() { flashButton(btn, '&#10003; Kopiert &ndash; in Notion mit Cmd/Strg + V einf&uuml;gen'); };
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -2093,14 +2176,13 @@ document.getElementById('btn-copy-md').addEventListener('click', function() {
 
 
 // ── Übergabe aus dem Notion-Block an die Browser-Fassung ─────────────────────
-// Die Links öffnen PAGES_URL#pdf-import (Notion fragt vorher nach, ob die
-// Webseite geöffnet werden soll). Der Inhalt wird im selben Klick synchron
-// kopiert – nach dem Öffnen hat der Block keinen Fokus mehr für die
-// asynchrone Clipboard-API. Übergeben wird Markdown mit Frontmatter, das sich
-// dort per Cmd/Strg + V (oder über das Einfügefeld) laden lässt.
-var HANDOFF_URL = PAGES_URL + '#pdf-import';
-document.getElementById('link-pdf-browser').href    = HANDOFF_URL;
-document.getElementById('link-agenda-browser').href = HANDOFF_URL;
+// Die Links öffnen PAGES_URL#pdf-import bzw. #agenda-import (Notion fragt
+// vorher nach, ob die Webseite geöffnet werden soll). Der Inhalt wird im
+// selben Klick synchron kopiert – nach dem Öffnen hat der Block keinen Fokus
+// mehr für die asynchrone Clipboard-API. Übergeben wird der Protokolltext
+// samt Tabelle "Sitzungsdaten", der sich dort per Cmd/Strg + V laden lässt.
+document.getElementById('link-pdf-browser').href    = PAGES_URL + '#pdf-import';
+document.getElementById('link-agenda-browser').href = PAGES_URL + '#agenda-import';
 
 function handoffToBrowser(md) {
   if (copyTextSync(md)) return;
@@ -2108,31 +2190,31 @@ function handoffToBrowser(md) {
 }
 
 /**
- * Ergänzt geladenes Protokoll-Markdown um Metadaten: Ohne Frontmatter (aus
- * Notion eingefügt) werden die Angaben aus dem Generator-Tab vorangestellt,
- * einem vorhandenen Frontmatter ohne "modus" wird der aktuelle Modus ergänzt.
+ * Stellt sicher, dass übergebenes Markdown Sitzungsdaten enthält: Fehlen
+ * Tabelle und Frontmatter (z.B. Tabelle in Notion gelöscht), wird eine
+ * Tabelle aus den Generator-Eingaben vorangestellt – passend zum Format
+ * (Notion: "# ", HedgeDoc: "## "), damit die Überschriftenebenen stimmen.
  */
-function withHandoffFrontmatter(md) {
-  if (!hasFrontmatter(md)) return buildFrontmatter(getMeta()) + md;
-  if (parseMeta(md).modus) return md;
-  return md.replace(/^---\n/, '---\nmodus: ' + currentMode + '\n');
+function withSessionMeta(md) {
+  if (getSessionMeta(md).source !== 'generator') return md;
+  return buildMetaTableMd(isNotionMd(md) ? '# ' : '## ') + md;
 }
 
 document.getElementById('link-pdf-browser').addEventListener('click', function(e) {
   if (!uploadedMd) { e.preventDefault(); return; }
-  handoffToBrowser(withHandoffFrontmatter(uploadedMd));
+  handoffToBrowser(withSessionMeta(uploadedMd));
 });
 
-// Tagesordnung: komplette Vorlage samt Frontmatter; "export: tagesordnung"
-// sorgt dafür, dass die Browser-Fassung das Tagesordnungs-PDF anbietet.
+// Tagesordnung: komplette Vorlage samt Sitzungsdaten; #agenda-import sorgt
+// dafür, dass die Browser-Fassung das Tagesordnungs-PDF hervorhebt.
 document.getElementById('link-agenda-browser').addEventListener('click', function(e) {
-  var md = buildMd(true);
+  var md = buildMd();
   if (!LAST_AGENDA_DATA || !LAST_AGENDA_DATA.toc.length) {
     e.preventDefault();
     alert('Bitte zuerst mindestens einen Tagesordnungspunkt auswählen.');
     return;
   }
-  handoffToBrowser(md.replace(/^---\n/, '---\nexport: tagesordnung\n'));
+  handoffToBrowser(md);
 });
 
 
@@ -2188,22 +2270,25 @@ function loadProtocolMd(text, sourceLabel) {
   document.getElementById('preview-raw').textContent    = uploadedMd;
   document.getElementById('import-hint').style.display  = 'none';
 
-  // Modus aus dem Frontmatter übernehmen (z.B. nach Übergabe aus dem Notion-Block)
-  var fm = hasFrontmatter(uploadedMd) ? parseMeta(uploadedMd) : {};
-  if (fm.modus && MODES[fm.modus] && fm.modus !== currentMode) {
-    setMode(fm.modus, document.querySelector('.mode-btn[data-mode="' + fm.modus + '"]'));
+  // Modus aus den Sitzungsdaten übernehmen (Tabelle bzw. älteres Frontmatter)
+  var session = getSessionMeta(uploadedMd);
+  if (session.mode && session.mode !== currentMode) {
+    setMode(session.mode, document.querySelector('.mode-btn[data-mode="' + session.mode + '"]'));
   }
-  // Bei übergebener Tagesordnung den Tagesordnungs-Button hervorheben
-  var isAgenda = fm.export === 'tagesordnung';
+  // Bei übergebener Tagesordnung (#agenda-import) den Tagesordnungs-Button hervorheben
+  var isAgenda = IMPORT_KIND === 'agenda';
   document.getElementById('btn-pdf').className        = 'btn only-standalone ' + (isAgenda ? 'btn-sec' : 'btn-dl');
   document.getElementById('btn-pdf-agenda').className = 'btn only-standalone ' + (isAgenda ? 'btn-dl' : 'btn-sec');
 
-  document.getElementById('meta-source').innerHTML = hasFrontmatter(uploadedMd)
-    ? 'Die Sitzungsmetadaten f&uuml;r das PDF stammen aus dem Metadatenblock der geladenen Datei' +
-      (fm.modus && MODES[fm.modus] ? ', der Modus (' + MODES[fm.modus].name + ') wurde &uuml;bernommen.' : '.')
-    : '<strong>Kein Metadatenblock gefunden</strong> (z.&thinsp;B. bei aus Notion eingef&uuml;gtem Text) &ndash; ' +
-      'f&uuml;r das PDF werden Modus und Sitzungsmetadaten aus dem Tab <strong>Generator</strong> ' +
-      'verwendet. Bitte dort vor dem Erzeugen pr&uuml;fen.';
+  var modeNote = session.mode ? ' Modus: <strong>' + MODES[session.mode].name + '</strong>.' : '';
+  document.getElementById('meta-source').innerHTML =
+    session.source === 'table'
+      ? 'Die Sitzungsmetadaten f&uuml;r das PDF stammen aus der Tabelle <strong>Sitzungsdaten</strong>.' + modeNote
+    : session.source === 'frontmatter'
+      ? 'Die Sitzungsmetadaten f&uuml;r das PDF stammen aus dem Metadatenblock der geladenen Datei.' + modeNote
+      : '<strong>Keine Sitzungsdaten gefunden</strong> &ndash; die Tabelle &bdquo;Sitzungsdaten&ldquo; fehlt im ' +
+        'Text. Ersatzweise werden Modus und Angaben aus dem Tab <strong>Generator</strong> verwendet; ' +
+        'bitte dort pr&uuml;fen oder die Tabelle in Notion wieder erg&auml;nzen.';
   showRenderedView();
 }
 
@@ -2229,8 +2314,7 @@ document.getElementById('btn-pdf-agenda').addEventListener('click', function() {
     return (it.level === 1 ? '    ' : '') + it.text;
   });
   if (!tocLines.length) { alert('Im geladenen Text wurden keine Tagesordnungspunkte gefunden.'); return; }
-  var meta = hasFrontmatter(uploadedMd) ? parseMeta(uploadedMd) : pdfMetaFromGenerator();
-  downloadAgendaPdf(meta, tocLines, this);
+  downloadAgendaPdf(getSessionMeta(uploadedMd).meta, tocLines, this);
 });
 
 /** Prüft, ob das Markdown mit einem YAML-Frontmatter-Block beginnt. */
@@ -2246,8 +2330,11 @@ function hasFrontmatter(md) {
  * außerhalb von Codeblöcken um eine Ebene tiefer gesetzt. Markdown im
  * bisherigen HedgeDoc-Format bleibt unverändert.
  */
+function isNotionMd(md) {
+  return /^# (Protokoll|Tagesordnung|Anwesenheitsliste)\s*$/m.test(md);
+}
 function normalizeNotionMd(md) {
-  if (!/^# (Protokoll|Tagesordnung|Anwesenheitsliste)\s*$/m.test(md)) return md;
+  if (!isNotionMd(md)) return md;
   var inFence = false;
   return md.split('\n').map(function(line) {
     if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
@@ -3249,8 +3336,8 @@ document.getElementById('btn-pdf').addEventListener('click', function() {
   eb.style.display = 'none';
 
   setProgress(15, 'Metadaten werden gelesen...');
-  // Ohne Frontmatter (aus Notion eingefügt) stammen die Metadaten aus dem Generator-Tab
-  var meta    = hasFrontmatter(uploadedMd) ? parseMeta(uploadedMd) : pdfMetaFromGenerator();
+  // Metadaten aus der Tabelle "Sitzungsdaten" (bzw. Frontmatter, siehe getSessionMeta)
+  var meta    = getSessionMeta(uploadedMd).meta;
   var rawBody = applyTickboxes(protocolBody(uploadedMd));
 
   setProgress(35, 'Abschnitte werden verarbeitet...');
@@ -3631,7 +3718,7 @@ if (dateField && !dateField.value) {
 renderTops();
 
 // Aufruf aus dem Notion-Block (siehe handoffToBrowser): direkt zum Export-Tab
-if (location.hash === '#pdf-import') {
+if (IMPORT_KIND) {
   showPage('export', document.querySelectorAll('.tab')[1]);
   document.getElementById('import-hint').style.display = 'block';
 }
